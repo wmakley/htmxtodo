@@ -9,6 +9,7 @@ import (
 	log2 "github.com/labstack/gommon/log"
 	_ "github.com/lib/pq"
 	"htmxtodo/gen/htmxtodo_dev/public/model"
+	repo2 "htmxtodo/internal/repo"
 	"htmxtodo/internal/view"
 	"log"
 	"net/http"
@@ -20,11 +21,8 @@ import (
 	. "htmxtodo/gen/htmxtodo_dev/public/table"
 )
 
-//go:embed views
+//go:embed all:views/*
 var viewsFS embed.FS
-
-//go:embed public
-var publicFS embed.FS
 
 func main() {
 	err := godotenv.Load()
@@ -32,11 +30,15 @@ func main() {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 
+	env := os.Getenv("ENV")
+
 	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
 	if err != nil {
 		log.Fatalf("failed to open db: %v", err)
 	}
 	defer db.Close()
+
+	repo := repo2.NewRepository(db)
 
 	e := echo.New()
 
@@ -44,19 +46,33 @@ func main() {
 	e.Use(middleware.Recover())
 
 	e.HTTPErrorHandler = customHTTPErrorHandler
-	e.Renderer = view.NewCompiledOnDemandRenderer()
+
+	if env == "development" {
+		e.Renderer = view.NewCompiledOnDemandRenderer()
+	} else {
+		e.Renderer = view.NewEmbeddedTemplateRenderer(viewsFS)
+	}
 
 	//e.Use(middleware.BodyDump(func(c echo.Context, reqBody, resBody []byte) {
 	//	c.Logger().Debugf("Request Body: %s", reqBody)
 	//	//c.Logger().Debugf("Response Body: %s", resBody)
 	//}))
 
-	e.GET("/", func(c echo.Context) error {
+	r := e.GET("/", func(c echo.Context) error {
 		return c.Redirect(http.StatusFound, "/lists")
 	})
-	e.GET("/lists", NewListsIndexHandler(db))
-	e.GET("/lists/:id", NewShowListHandler(db))
-	e.POST("/lists", NewCreateListHandler(db))
+	r.Name = "root"
+
+	lists := ListsHandlers{repo: repo}
+
+	r = e.GET("/lists", lists.Index)
+	r.Name = "lists-index"
+	r = e.GET("/lists/:id", lists.Show)
+	r.Name = "lists-show"
+	r = e.POST("/lists", lists.Create)
+	r.Name = "lists-create"
+	r = e.PATCH("/lists/:id", lists.Update)
+	r.Name = "lists-update"
 
 	e.Logger.SetLevel(log2.DEBUG)
 
@@ -64,121 +80,147 @@ func main() {
 }
 
 func customHTTPErrorHandler(err error, c echo.Context) {
-	// Always log:
 	c.Logger().Error(err)
 
 	code := http.StatusInternalServerError
 	if he, ok := err.(*echo.HTTPError); ok {
 		code = he.Code
 	}
-	//err2 := c.NoContent(code)
-	//if err2 != nil {
-	//	panic(err2)
-	//}
-	errorPage := fmt.Sprintf("public/%d.html", code)
-	blob, err2 := publicFS.ReadFile(errorPage)
-	if err2 != nil {
-		panic(err2)
-	}
 
-	if err2 = c.Blob(code, "text/html", blob); err2 != nil {
+	errorPage := fmt.Sprintf("errors/%d.html", code)
+
+	if err2 := c.Render(code, errorPage, echo.Map{}); err2 != nil {
 		panic(err2)
 	}
 }
 
-func NewListsIndexHandler(db *sql.DB) echo.HandlerFunc {
-	return func(c echo.Context) error {
+type ListsHandlers struct {
+	repo repo2.Repository
+}
 
-		stmt := Lists.SELECT(Lists.AllColumns).ORDER_BY(Lists.Name.ASC())
+func (l *ListsHandlers) Index(c echo.Context) error {
 
-		var results []model.Lists
-		if err := stmt.QueryContext(c.Request().Context(), db, &results); err != nil {
-			return err
-		}
-
-		if results == nil {
-			results = make([]model.Lists, 0)
-		}
-
-		return c.Render(http.StatusOK, "lists/index", echo.Map{
-			"Title": "Lists",
-			"Lists": results,
-		})
+	results, err := l.repo.FilterLists(c.Request().Context())
+	if err != nil {
+		return err
 	}
+
+	return c.Render(http.StatusOK, "lists/index.html", echo.Map{
+		"Title":   "Lists",
+		"Lists":   results,
+		"NewList": model.Lists{},
+	})
 }
 
 type ShowListParams struct {
 	ID int64 `param:"id"`
 }
 
-func NewShowListHandler(db *sql.DB) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		var params ShowListParams
-		if err := c.Bind(&params); err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-		}
-
-		stmt := Lists.SELECT(Lists.AllColumns).WHERE(Lists.ID.EQ(Int(params.ID)))
-
-		var result model.Lists
-		if err := stmt.QueryContext(c.Request().Context(), db, &result); err != nil {
-			return err
-		}
-
-		if result.ID == 0 {
-			return echo.NewHTTPError(http.StatusNotFound, "list not found")
-		}
-
-		return c.Render(http.StatusOK, "lists/show", echo.Map{
-			"Title": "List",
-			"List":  result,
-		})
+func (l *ListsHandlers) Show(c echo.Context) error {
+	var params ShowListParams
+	if err := c.Bind(&params); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
+
+	result, err := l.repo.GetListById(c.Request().Context(), params.ID)
+	if err != nil {
+		return err
+	}
+
+	return c.Render(http.StatusOK, "lists/show.html", echo.Map{
+		"Title": "List",
+		"List":  result,
+	})
+}
+
+func (l *ListsHandlers) Edit(c echo.Context) error {
+	var params ShowListParams
+	if err := c.Bind(&params); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	result, err := l.repo.GetListById(c.Request().Context(), params.ID)
+	if err != nil {
+		return err
+	}
+
+	return c.Render(http.StatusOK, "lists/edit.html", echo.Map{
+		"List": result,
+	})
 }
 
 type CreateListRequest struct {
-	Name string `json:"name" form:"name" query:"name"`
+	Name string `json:"name" form:"name"`
 }
 
-func NewCreateListHandler(db *sql.DB) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		json := CreateListRequest{}
+func (l *ListsHandlers) Create(c echo.Context) error {
+	var req CreateListRequest
 
-		err := c.Bind(&json)
-		if err != nil {
-			return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-		}
-
-		//c.Logger().Debugf("Bound: %+v", json)
-
-		json.Name = strings.TrimSpace(json.Name)
-		if json.Name == "" {
-			return echo.NewHTTPError(http.StatusBadRequest, "name is required")
-		}
-
-		tx, err := db.BeginTx(c.Request().Context(), nil)
-		if err != nil {
-			return err
-		}
-		defer tx.Rollback()
-
-		stmt := Lists.INSERT(Lists.Name).
-			VALUES(json.Name).
-			RETURNING(Lists.AllColumns)
-
-		c.Logger().Debug(stmt.Sql())
-
-		result := model.Lists{}
-		err = stmt.QueryContext(c.Request().Context(), tx, &result)
-		if err != nil {
-			return err
-		}
-
-		err = tx.Commit()
-		if err != nil {
-			return err
-		}
-
-		return c.Redirect(http.StatusFound, fmt.Sprintf("/lists/%d", result.ID))
+	err := c.Bind(&req)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
 	}
+
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
+	}
+
+	result, err := l.repo.CreateList(c.Request().Context(), req.Name)
+	if err != nil {
+		return err
+	}
+
+	return c.Render(http.StatusOK, "lists/shared/_card.html", result)
+}
+
+type UpdateListRequest struct {
+	ID   int64  `param:"id"`
+	Name string `json:"name" form:"name"`
+}
+
+func (l *ListsHandlers) Update(c echo.Context) error {
+	var req UpdateListRequest
+	if err := c.Bind(&req); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
+	}
+
+	tx, err := l.db.BeginTx(c.Request().Context(), nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var list model.Lists
+	selectStmt := Lists.SELECT(Lists.AllColumns).
+		WHERE(Lists.ID.EQ(Int(req.ID))).
+		LIMIT(1)
+	c.Logger().Debug(selectStmt.Sql())
+	if err = selectStmt.QueryContext(c.Request().Context(), tx, &list); err != nil {
+		panic(err)
+	}
+	if list.ID == 0 {
+		return echo.NewHTTPError(http.StatusNotFound, "list not found")
+	}
+
+	updateStmt := Lists.UPDATE(Lists.Name).
+		SET(req.Name).
+		WHERE(Lists.ID.EQ(Int(req.ID))).
+		RETURNING(Lists.AllColumns)
+	c.Logger().Debug(updateStmt.Sql())
+
+	if err = updateStmt.QueryContext(c.Request().Context(), tx, &list); err != nil {
+		return err
+	}
+
+	if err = tx.Commit(); err != nil {
+		return err
+	}
+
+	return c.Redirect(http.StatusFound, fmt.Sprintf("/lists/%d", list.ID))
 }

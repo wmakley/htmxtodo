@@ -4,3 +4,8 @@
 
 # secrets
 .env
+
+
+# Added by cargo
+
+/target

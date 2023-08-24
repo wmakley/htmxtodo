@@ -1,0 +1,25 @@
+<div class="card mb-3" id="list-{{.ID}}">
+	<header class="card-header">
+		<p class="card-header-title">
+            {{if .Name}}
+                {{.Name}}
+            {{else}}
+				(Untitled List)
+            {{end}}
+		</p>
+	</header>
+	<div class="card-content">
+		<div class="content">
+			<ul>
+				<li>Item 1</li>
+				<li>Item 2</li>
+				<li>Item 3</li>
+			</ul>
+		</div>
+	</div>
+	<footer class="card-footer">
+		<a href="#" class="card-footer-item">Save</a>
+		<a href="#" class="card-footer-item">Edit</a>
+		<a href="#" class="card-footer-item">Delete</a>
+	</footer>
+</div>
