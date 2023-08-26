@@ -3,54 +3,69 @@ package repo
 import (
 	"context"
 	"database/sql"
-	"htmxtodo/gen/htmxtodo_dev/public/model"
-
 	. "github.com/go-jet/jet/v2/postgres"
+	"htmxtodo/gen/htmxtodo_dev/public/model"
 	. "htmxtodo/gen/htmxtodo_dev/public/table"
 )
 
 type Repository interface {
-	FilterLists(ctx context.Context) ([]model.Lists, error)
-	GetListById(ctx context.Context, id int64) (model.Lists, error)
-	CreateList(ctx context.Context, name string) (model.Lists, error)
-	UpdateListById(ctx context.Context, id int64, list model.Lists) (model.Lists, error)
+	FilterLists(ctx context.Context) ([]model.List, error)
+	GetListById(ctx context.Context, id int64) (model.List, error)
+	CreateList(ctx context.Context, name string) (model.List, error)
+	UpdateListById(ctx context.Context, id int64, name string) (model.List, error)
 	DeleteListById(ctx context.Context, id int64) error
 }
 
-func NewRepository(db *sql.DB) Repository {
+type DBTX interface {
+	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
+	PrepareContext(context.Context, string) (*sql.Stmt, error)
+	QueryContext(context.Context, string, ...interface{}) (*sql.Rows, error)
+	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
+}
+
+func New(db *sql.DB) Repository {
 	return &repository{
+		// db is the database connection
 		db: db,
+		// dbtx is either the database connection or a transaction, allows nested repository calls
+		// to use the same transaction
+		dbtx: db,
 	}
 }
 
-type DBTX interface {
-	BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error)
-}
-
 type repository struct {
-	db *sql.DB
+	db   *sql.DB
+	dbtx DBTX
 }
 
-func (r *repository) FilterLists(ctx context.Context) ([]model.Lists, error) {
-	stmt := Lists.SELECT(Lists.AllColumns).ORDER_BY(Lists.Name.ASC())
+// withTransaction returns a new repository that uses the provided transaction as dbtx
+func (r *repository) withTransaction(tx *sql.Tx) *repository {
+	return &repository{
+		db:   r.db,
+		dbtx: tx,
+	}
+}
 
-	var results []model.Lists
-	if err := stmt.QueryContext(ctx, r.db, &results); err != nil {
+func (r *repository) FilterLists(ctx context.Context) ([]model.List, error) {
+	stmt := List.SELECT(List.AllColumns).ORDER_BY(List.Name.ASC())
+
+	var results []model.List
+	if err := stmt.QueryContext(ctx, r.dbtx, &results); err != nil {
 		return nil, err
 	}
 
 	if results == nil {
-		results = make([]model.Lists, 0)
+		results = make([]model.List, 0)
 	}
 
 	return results, nil
 }
 
-func (r *repository) GetListById(ctx context.Context, id int64) (model.Lists, error) {
-	stmt := Lists.SELECT(Lists.AllColumns).WHERE(Lists.ID.EQ(Int(id))).LIMIT(1)
+func (r *repository) GetListById(ctx context.Context, id int64) (model.List, error) {
+	stmt := List.SELECT(List.AllColumns).WHERE(List.ID.EQ(Int(id))).LIMIT(1)
 
-	var result model.Lists
-	if err := stmt.QueryContext(ctx, r.db, &result); err != nil {
+	var result model.List
+	if err := stmt.QueryContext(ctx, r.dbtx, &result); err != nil {
 		return result, err
 	}
 
@@ -61,53 +76,60 @@ func (r *repository) GetListById(ctx context.Context, id int64) (model.Lists, er
 	return result, nil
 }
 
-func (r *repository) CreateList(ctx context.Context, name string) (model.Lists, error) {
-	var result model.Lists
+func (r *repository) CreateList(ctx context.Context, name string) (model.List, error) {
+	var result model.List
 
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return result, err
-	}
-	defer tx.Rollback()
-
-	stmt := Lists.INSERT(Lists.Name).
+	stmt := List.INSERT(List.Name).
 		VALUES(name).
-		RETURNING(Lists.AllColumns)
+		RETURNING(List.AllColumns)
 
-	if err := stmt.QueryContext(ctx, r.db, &result); err != nil {
-		return result, err
-	}
-
-	if err = tx.Commit(); err != nil {
+	if err := stmt.QueryContext(ctx, r.dbtx, &result); err != nil {
 		return result, err
 	}
 
 	return result, nil
 }
 
-func (r *repository) UpdateListById(ctx context.Context, id int64, list model.Lists) (model.Lists, error) {
-	var result model.Lists
-
+func (r *repository) UpdateListById(ctx context.Context, id int64, name string) (model.List, error) {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
-		return result, err
+		panic(err) // unrecoverable
 	}
 	defer tx.Rollback()
+	rtx := r.withTransaction(tx)
 
-	// TODO: get the list first?
+	existing, err := rtx.GetListById(ctx, id)
 
-	updateStmt := Lists.UPDATE(Lists.Name).
-		SET(list.Name).
-		WHERE(Lists.ID.EQ(Int(id))).
-		RETURNING(Lists.AllColumns)
+	if existing.Name == name {
+		// No update needed
+		return existing, nil
+	}
 
-	if err = updateStmt.QueryContext(ctx, tx, &result); err != nil {
-		return result, err
+	updateStmt := List.UPDATE(List.Name, List.UpdatedAt).
+		SET(name, NOW()).
+		WHERE(List.ID.EQ(Int(id))).
+		RETURNING(List.AllColumns)
+
+	if err = updateStmt.QueryContext(ctx, tx, &existing); err != nil {
+		return existing, err
 	}
 
 	if err = tx.Commit(); err != nil {
-		return result, err
+		return existing, err
 	}
 
-	return result, nil
+	return existing, nil
+}
+
+func (r *repository) DeleteListById(ctx context.Context, id int64) error {
+	deleteStmt := List.DELETE().
+		WHERE(List.ID.EQ(Int(id))).
+		RETURNING(List.ID)
+
+	var result int64
+	if err := deleteStmt.QueryContext(ctx, r.dbtx, &result); err != nil {
+		return err
+	}
+
+	return nil
 }

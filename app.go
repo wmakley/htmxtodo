@@ -16,9 +16,7 @@ import (
 	"os"
 	"strings"
 
-	. "github.com/go-jet/jet/v2/postgres"
 	"github.com/labstack/echo/v4"
-	. "htmxtodo/gen/htmxtodo_dev/public/table"
 )
 
 //go:embed all:views/*
@@ -30,7 +28,7 @@ func main() {
 		log.Fatalf("Error loading .env file: %v", err)
 	}
 
-	env := os.Getenv("ENV")
+	env := os.Getenv("ENVIRONMENT")
 
 	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
 	if err != nil {
@@ -38,7 +36,7 @@ func main() {
 	}
 	defer db.Close()
 
-	repo := repo2.NewRepository(db)
+	repo := repo2.New(db)
 
 	e := echo.New()
 
@@ -108,7 +106,7 @@ func (l *ListsHandlers) Index(c echo.Context) error {
 	return c.Render(http.StatusOK, "lists/index.html", echo.Map{
 		"Title":   "Lists",
 		"Lists":   results,
-		"NewList": model.Lists{},
+		"NewList": model.List{},
 	})
 }
 
@@ -190,35 +188,8 @@ func (l *ListsHandlers) Update(c echo.Context) error {
 		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
 	}
 
-	tx, err := l.db.BeginTx(c.Request().Context(), nil)
+	list, err := l.repo.UpdateListById(c.Request().Context(), req.ID, req.Name)
 	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	var list model.Lists
-	selectStmt := Lists.SELECT(Lists.AllColumns).
-		WHERE(Lists.ID.EQ(Int(req.ID))).
-		LIMIT(1)
-	c.Logger().Debug(selectStmt.Sql())
-	if err = selectStmt.QueryContext(c.Request().Context(), tx, &list); err != nil {
-		panic(err)
-	}
-	if list.ID == 0 {
-		return echo.NewHTTPError(http.StatusNotFound, "list not found")
-	}
-
-	updateStmt := Lists.UPDATE(Lists.Name).
-		SET(req.Name).
-		WHERE(Lists.ID.EQ(Int(req.ID))).
-		RETURNING(Lists.AllColumns)
-	c.Logger().Debug(updateStmt.Sql())
-
-	if err = updateStmt.QueryContext(c.Request().Context(), tx, &list); err != nil {
-		return err
-	}
-
-	if err = tx.Commit(); err != nil {
 		return err
 	}
 

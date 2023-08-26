@@ -7,6 +7,15 @@
 
 package model
 
-type SchemaMigrations struct {
-	Version string `sql:"primary_key"`
+import (
+	"time"
+)
+
+type Item struct {
+	ID        int64 `sql:"primary_key"`
+	ListID    int64
+	Position  int32
+	Name      string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }

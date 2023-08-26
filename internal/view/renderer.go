@@ -123,24 +123,58 @@ type compiledOnDemandRenderer struct {
 
 func (t *compiledOnDemandRenderer) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
 	parts := strings.SplitN(name, "/", 2)
-	subDir := parts[0]
+	viewDir := parts[0]
+	if strings.Contains(parts[1], "/") {
+		panic("subdirectories not supported")
+	}
 
-	baseFile := fmt.Sprintf("views/%s", name)
+	baseFile := "views/" + name
 
-	subDirSharedFiles, err := os.ReadDir(fmt.Sprintf("views/%s/shared", subDir))
-
-	globalSharedFiles, err := os.ReadDir("views/shared")
+	allViewDirEntries, err := os.ReadDir("views/" + viewDir)
 	if err != nil {
 		panic(err)
 	}
 
-	allTemplates := make([]string, 0, len(globalSharedFiles)+len(subDirSharedFiles)+1)
-	allTemplates = append(allTemplates, baseFile)
-	for _, f := range globalSharedFiles {
-		allTemplates = append(allTemplates, fmt.Sprintf("views/shared/%s", f.Name()))
+	globalPartialEntries, err := os.ReadDir("views/shared")
+	if err != nil {
+		panic(err)
 	}
-	for _, f := range subDirSharedFiles {
-		allTemplates = append(allTemplates, fmt.Sprintf("views/%s/shared/%s", subDir, f.Name()))
+	globalPartials := make([]string, 0, len(globalPartialEntries))
+	for _, f := range globalPartialEntries {
+		if f.IsDir() {
+			continue
+		}
+		if !strings.HasPrefix(f.Name(), "_") {
+			continue
+		}
+		if !strings.HasSuffix(f.Name(), ".html") {
+			continue
+		}
+		globalPartials = append(globalPartials, "views/shared/"+f.Name())
+	}
+
+	viewPartials := make([]string, 0, 5)
+	for _, f := range allViewDirEntries {
+		if f.IsDir() {
+			continue
+		}
+		if !strings.HasPrefix(f.Name(), "_") {
+			continue
+		}
+		if !strings.HasSuffix(f.Name(), ".html") {
+			continue
+		}
+		viewPartials = append(viewPartials, "views/"+viewDir+"/"+f.Name())
+	}
+
+	allTemplates := make([]string, 0, len(globalPartials)+len(viewPartials)+1)
+	allTemplates = append(allTemplates, baseFile)
+	for _, f := range globalPartials {
+		allTemplates = append(allTemplates, f)
+	}
+	// View partials override global partials
+	for _, f := range viewPartials {
+		allTemplates = append(allTemplates, f)
 	}
 
 	tmpl := template.Must(template.ParseFiles(allTemplates...))

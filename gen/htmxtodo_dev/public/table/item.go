@@ -11,9 +11,9 @@ import (
 	"github.com/go-jet/jet/v2/postgres"
 )
 
-var Items = newItemsTable("public", "items", "")
+var Item = newItemTable("public", "item", "")
 
-type itemsTable struct {
+type itemTable struct {
 	postgres.Table
 
 	// Columns
@@ -28,40 +28,40 @@ type itemsTable struct {
 	MutableColumns postgres.ColumnList
 }
 
-type ItemsTable struct {
-	itemsTable
+type ItemTable struct {
+	itemTable
 
-	EXCLUDED itemsTable
+	EXCLUDED itemTable
 }
 
-// AS creates new ItemsTable with assigned alias
-func (a ItemsTable) AS(alias string) *ItemsTable {
-	return newItemsTable(a.SchemaName(), a.TableName(), alias)
+// AS creates new ItemTable with assigned alias
+func (a ItemTable) AS(alias string) *ItemTable {
+	return newItemTable(a.SchemaName(), a.TableName(), alias)
 }
 
-// Schema creates new ItemsTable with assigned schema name
-func (a ItemsTable) FromSchema(schemaName string) *ItemsTable {
-	return newItemsTable(schemaName, a.TableName(), a.Alias())
+// Schema creates new ItemTable with assigned schema name
+func (a ItemTable) FromSchema(schemaName string) *ItemTable {
+	return newItemTable(schemaName, a.TableName(), a.Alias())
 }
 
-// WithPrefix creates new ItemsTable with assigned table prefix
-func (a ItemsTable) WithPrefix(prefix string) *ItemsTable {
-	return newItemsTable(a.SchemaName(), prefix+a.TableName(), a.TableName())
+// WithPrefix creates new ItemTable with assigned table prefix
+func (a ItemTable) WithPrefix(prefix string) *ItemTable {
+	return newItemTable(a.SchemaName(), prefix+a.TableName(), a.TableName())
 }
 
-// WithSuffix creates new ItemsTable with assigned table suffix
-func (a ItemsTable) WithSuffix(suffix string) *ItemsTable {
-	return newItemsTable(a.SchemaName(), a.TableName()+suffix, a.TableName())
+// WithSuffix creates new ItemTable with assigned table suffix
+func (a ItemTable) WithSuffix(suffix string) *ItemTable {
+	return newItemTable(a.SchemaName(), a.TableName()+suffix, a.TableName())
 }
 
-func newItemsTable(schemaName, tableName, alias string) *ItemsTable {
-	return &ItemsTable{
-		itemsTable: newItemsTableImpl(schemaName, tableName, alias),
-		EXCLUDED:   newItemsTableImpl("", "excluded", ""),
+func newItemTable(schemaName, tableName, alias string) *ItemTable {
+	return &ItemTable{
+		itemTable: newItemTableImpl(schemaName, tableName, alias),
+		EXCLUDED:  newItemTableImpl("", "excluded", ""),
 	}
 }
 
-func newItemsTableImpl(schemaName, tableName, alias string) itemsTable {
+func newItemTableImpl(schemaName, tableName, alias string) itemTable {
 	var (
 		IDColumn        = postgres.IntegerColumn("id")
 		ListIDColumn    = postgres.IntegerColumn("list_id")
@@ -73,7 +73,7 @@ func newItemsTableImpl(schemaName, tableName, alias string) itemsTable {
 		mutableColumns  = postgres.ColumnList{ListIDColumn, PositionColumn, NameColumn, CreatedAtColumn, UpdatedAtColumn}
 	)
 
-	return itemsTable{
+	return itemTable{
 		Table: postgres.NewTable(schemaName, tableName, alias, allColumns...),
 
 		//Columns

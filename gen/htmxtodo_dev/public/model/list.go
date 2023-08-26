@@ -11,8 +11,8 @@ import (
 	"time"
 )
 
-type Lists struct {
-	ID        int32 `sql:"primary_key"`
+type List struct {
+	ID        int64 `sql:"primary_key"`
 	Name      string
 	CreatedAt time.Time
 	UpdatedAt time.Time
