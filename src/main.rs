@@ -64,7 +64,9 @@ async fn main() -> anyhow::Result<()> {
         .context("could not connect to database_url")?;
 
     let mut hbs = Handlebars::new();
-    hbs.register_template_file("head", "./views/shared/_head.hbs")
+    hbs.register_template_file("layouts/main", "./views/layouts/main.hbs")
+        .context("could not register layouts/main template")?;
+    hbs.register_template_file("shared/_head", "./views/shared/_head.hbs")
         .context("could not register shared/head template")?;
     hbs.register_template_file("lists/index", "./views/lists/index.hbs")
         .context("could not register lists/index template")?;

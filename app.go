@@ -45,11 +45,11 @@ func main() {
 
 	e.HTTPErrorHandler = customHTTPErrorHandler
 
-	if env == "development" {
-		e.Renderer = view.NewCompiledOnDemandRenderer()
-	} else {
-		e.Renderer = view.NewEmbeddedTemplateRenderer(viewsFS)
-	}
+	e.Renderer = view.New(&view.Config{
+		CompileOnRender: env == "development",
+		Path:            "views",
+		EmbedFS:         viewsFS,
+	})
 
 	//e.Use(middleware.BodyDump(func(c echo.Context, reqBody, resBody []byte) {
 	//	c.Logger().Debugf("Request Body: %s", reqBody)

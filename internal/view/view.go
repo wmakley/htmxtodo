@@ -7,6 +7,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"html/template"
 	"io"
+	"io/fs"
 	"os"
 	"strings"
 )
@@ -113,15 +114,131 @@ func (t *embeddedTemplateRenderer) Render(w io.Writer, name string, data interfa
 	return nil
 }
 
-// NewCompiledOnDemandRenderer is a embeddedTemplateRenderer that compiles templates on every request. Good for development.
-func NewCompiledOnDemandRenderer() echo.Renderer {
-	return &compiledOnDemandRenderer{}
+// New is a embeddedTemplateRenderer that compiles templates on every request. Good for development.
+func New(config *Config) echo.Renderer {
+	if config == nil {
+		panic("config is nil")
+	}
+
+	var internalFS FS
+	if config.CompileOnRender {
+		internalFS = os.DirFS(".").(FS)
+	} else {
+		internalFS = config.EmbedFS
+	}
+
+	v := view{
+		config: config,
+		fs:     internalFS,
+		views:  make(map[string]*template.Template),
+	}
+	v.init()
+	return &v
 }
 
-type compiledOnDemandRenderer struct {
+// FS has all file system interfaces needed by view.
+type FS interface {
+	fs.FS
+	//fs.ReadFileFS
+	fs.ReadDirFS
 }
 
-func (t *compiledOnDemandRenderer) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
+type Config struct {
+	// If true, templates will be compiled on every request. Good for development.
+	CompileOnRender bool
+	Path            string
+	EmbedFS         embed.FS
+}
+
+type view struct {
+	config         *Config
+	fs             FS
+	views          map[string]*template.Template
+	sharedPartials *template.Template
+}
+
+func (v *view) init() {
+	v.loadSharedPartials()
+}
+
+func (v *view) mustParseKey(key string) viewKey {
+	parts := strings.SplitN(key, "/", 2)
+	if strings.Contains(parts[1], "/") {
+		panic("subdirectories not supported")
+	}
+	return viewKey{
+		viewDir:   parts[0],
+		name:      parts[1],
+		isPartial: strings.HasPrefix(parts[1], "_"),
+		isShared:  parts[0] == "shared",
+	}
+}
+
+type viewKey struct {
+	viewDir   string
+	name      string
+	isPartial bool
+	isShared  bool
+}
+
+func (v *view) loadSharedPartials() {
+	entries, err := v.fs.ReadDir("views/shared")
+	if err != nil {
+		panic(err)
+	}
+
+	partials := make([]string, 0, len(entries))
+	for _, f := range entries {
+		if isPartial(f) {
+			partials = append(partials, "views/shared/"+f.Name())
+		}
+	}
+
+	v.sharedPartials = template.Must(template.ParseFS(v.fs, partials...))
+}
+
+func (v *view) listPartials(viewDir string) []string {
+	entries, err := v.fs.ReadDir("views/" + viewDir)
+	if err != nil {
+		panic(err)
+	}
+
+	partials := make([]string, 0, len(entries))
+	for _, f := range entries {
+		if isPartial(f) {
+			partials = append(partials, "views/"+viewDir+"/"+f.Name())
+		}
+	}
+	return partials
+}
+
+func (v *view) listViews(viewDir string) []string {
+	entries, err := v.fs.ReadDir("views/" + viewDir)
+	if err != nil {
+		panic(err)
+	}
+
+	templates := make([]string, 0, len(entries))
+	for _, f := range entries {
+		if isTemplate(f) && !strings.HasPrefix(f.Name(), "_") {
+			templates = append(templates, "views/"+viewDir+"/"+f.Name())
+		}
+	}
+	return templates
+}
+
+// isTemplate returns true if the path has a .html extension.
+func isTemplate(path fs.DirEntry) bool {
+	return strings.HasSuffix(path.Name(), ".html")
+}
+
+// isPartial returns true if the path is a partial template file.
+// (starts with _ and has a .html extension)
+func isPartial(path fs.DirEntry) bool {
+	return isTemplate(path) && strings.HasPrefix(path.Name(), "_")
+}
+
+func (v *view) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
 	parts := strings.SplitN(name, "/", 2)
 	viewDir := parts[0]
 	if strings.Contains(parts[1], "/") {
@@ -141,13 +258,7 @@ func (t *compiledOnDemandRenderer) Render(w io.Writer, name string, data interfa
 	}
 	globalPartials := make([]string, 0, len(globalPartialEntries))
 	for _, f := range globalPartialEntries {
-		if f.IsDir() {
-			continue
-		}
-		if !strings.HasPrefix(f.Name(), "_") {
-			continue
-		}
-		if !strings.HasSuffix(f.Name(), ".html") {
+		if !isPartial(f) {
 			continue
 		}
 		globalPartials = append(globalPartials, "views/shared/"+f.Name())
@@ -155,13 +266,7 @@ func (t *compiledOnDemandRenderer) Render(w io.Writer, name string, data interfa
 
 	viewPartials := make([]string, 0, 5)
 	for _, f := range allViewDirEntries {
-		if f.IsDir() {
-			continue
-		}
-		if !strings.HasPrefix(f.Name(), "_") {
-			continue
-		}
-		if !strings.HasSuffix(f.Name(), ".html") {
+		if !isPartial(f) {
 			continue
 		}
 		viewPartials = append(viewPartials, "views/"+viewDir+"/"+f.Name())

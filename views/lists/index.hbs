@@ -1,20 +1,11 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-	{{>head title="Lists"}}
-</head>
-<body>
-<section class="section">
-	<div class="container">
-		<div class="content">
-			<h1 class="title">Lists</h1>
-			<div id="lists">
-				{{#each lists}}
-					{{>lists/_card list=this editing_name=false}}
-				{{/each}}
-			</div>
-			{{>lists/_form list=new_list}}
+{{#> layouts/main title="Lists"}}
+	{{#*inline "content"}}
+		<h1 class="title">Lists</h1>
+		<div id="lists">
+			{{#each lists}}
+				{{>lists/_card list=this editing_name=false}}
+			{{/each}}
 		</div>
-	</div>
-</section>
-</body>
+		{{>lists/_form list=new_list}}
+	{{/inline}}
+{{/layouts/main}}

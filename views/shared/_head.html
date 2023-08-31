@@ -5,3 +5,12 @@
 <script src="https://unpkg.com/htmx.org@1.9.4"
 		integrity="sha384-zUfuhFKKZCbHTY6aRR46gxiqszMk5tcHjsVFxnUo8VMus4kHGVdIYVbOYYNlKmHV"
 		crossorigin="anonymous"></script>
+<script>
+	document.addEventListener('DOMContentLoaded', () => {
+		document.body.addEventListener('htmx:beforeSwap', function (event) {
+			if (event.detail.xhr.status === 204) {
+				event.detail.shouldSwap = true;
+			}
+		});
+	});
+</script>
