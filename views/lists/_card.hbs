@@ -2,7 +2,9 @@
 	<header class="card-header">
 	<p class="card-header-title">
 		{{#if editing_name}}
-			<form hx-patch="/lists/{{list.id}}" hx-target="#list-{{list.id}}">
+			<form hx-patch="/lists/{{list.id}}"
+				  hx-target="#list-{{list.id}}"
+				  hx-swap="outerHTML">
 				<input type="text"
 					   value="{{list.name}}"
 					   class="input"

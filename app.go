@@ -29,6 +29,14 @@ func main() {
 	}
 
 	env := os.Getenv("ENVIRONMENT")
+	host := os.Getenv("HOST")
+	if host == "" {
+		host = "0.0.0.0"
+	}
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
 
 	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
 	if err != nil {
@@ -51,11 +59,6 @@ func main() {
 		EmbedFS:         viewsFS,
 	})
 
-	//e.Use(middleware.BodyDump(func(c echo.Context, reqBody, resBody []byte) {
-	//	c.Logger().Debugf("Request Body: %s", reqBody)
-	//	//c.Logger().Debugf("Response Body: %s", resBody)
-	//}))
-
 	r := e.GET("/", func(c echo.Context) error {
 		return c.Redirect(http.StatusFound, "/lists")
 	})
@@ -69,31 +72,55 @@ func main() {
 	r.Name = "lists-show"
 	r = e.POST("/lists", lists.Create)
 	r.Name = "lists-create"
+	r = e.GET("/lists/:id/edit", lists.Edit)
+	r.Name = "lists-edit"
 	r = e.PATCH("/lists/:id", lists.Update)
 	r.Name = "lists-update"
+	r = e.DELETE("/lists/:id", lists.Delete)
+	r.Name = "lists-delete"
 
 	e.Logger.SetLevel(log2.DEBUG)
 
-	e.Logger.Fatal(e.Start(":1323"))
+	e.Logger.Fatal(e.Start(host + ":" + port))
 }
 
 func customHTTPErrorHandler(err error, c echo.Context) {
 	c.Logger().Error(err)
 
 	code := http.StatusInternalServerError
+	msg := "Internal Server Error"
 	if he, ok := err.(*echo.HTTPError); ok {
 		code = he.Code
+		msg = he.Error()
 	}
 
-	errorPage := fmt.Sprintf("errors/%d.html", code)
+	if code == http.StatusNotFound {
+		errorPage := fmt.Sprintf("errors/%d.html", code)
 
-	if err2 := c.Render(code, errorPage, echo.Map{}); err2 != nil {
-		panic(err2)
+		templateErr := c.Render(code, errorPage, echo.Map{
+			"Title":      fmt.Sprintf("Error %d", code),
+			"StatusCode": code,
+		})
+		if templateErr == nil {
+			return
+		}
+
+		c.Logger().Error(templateErr)
+	}
+
+	text := fmt.Sprintf("%d - %s", code, msg)
+	if textErr := c.Blob(code, echo.MIMETextPlainCharsetUTF8, []byte(text)); textErr != nil {
+		panic(textErr)
 	}
 }
 
 type ListsHandlers struct {
 	repo repo2.Repository
+}
+
+type CardView struct {
+	EditingName bool
+	List        model.List
 }
 
 func (l *ListsHandlers) Index(c echo.Context) error {
@@ -103,9 +130,17 @@ func (l *ListsHandlers) Index(c echo.Context) error {
 		return err
 	}
 
+	viewObjects := make([]CardView, len(results))
+	for i, result := range results {
+		viewObjects[i] = CardView{
+			EditingName: false,
+			List:        result,
+		}
+	}
+
 	return c.Render(http.StatusOK, "lists/index.html", echo.Map{
 		"Title":   "Lists",
-		"Lists":   results,
+		"Lists":   viewObjects,
 		"NewList": model.List{},
 	})
 }
@@ -142,8 +177,9 @@ func (l *ListsHandlers) Edit(c echo.Context) error {
 		return err
 	}
 
-	return c.Render(http.StatusOK, "lists/edit.html", echo.Map{
-		"List": result,
+	return c.Render(http.StatusOK, "lists/_card.html", CardView{
+		EditingName: true,
+		List:        result,
 	})
 }
 
@@ -169,7 +205,10 @@ func (l *ListsHandlers) Create(c echo.Context) error {
 		return err
 	}
 
-	return c.Render(http.StatusOK, "lists/shared/_card.html", result)
+	return c.Render(http.StatusOK, "lists/_card.html", CardView{
+		EditingName: false,
+		List:        result,
+	})
 }
 
 type UpdateListRequest struct {
@@ -193,5 +232,22 @@ func (l *ListsHandlers) Update(c echo.Context) error {
 		return err
 	}
 
-	return c.Redirect(http.StatusFound, fmt.Sprintf("/lists/%d", list.ID))
+	return c.Render(http.StatusOK, "lists/_card.html", CardView{
+		EditingName: false,
+		List:        list,
+	})
+}
+
+func (l *ListsHandlers) Delete(c echo.Context) error {
+	var params ShowListParams
+	if err := c.Bind(&params); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	}
+
+	err := l.repo.DeleteListById(c.Request().Context(), params.ID)
+	if err != nil {
+		return err
+	}
+
+	return c.Blob(http.StatusNoContent, echo.MIMETextPlainCharsetUTF8, []byte{})
 }

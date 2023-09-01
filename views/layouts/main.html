@@ -3,7 +3,7 @@
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>{{title}} - Htmxtodo</title>
+	<title>{{.Title}} - Htmxtodo</title>
 	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
 	<script src="https://unpkg.com/htmx.org@1.9.4"
 			integrity="sha384-zUfuhFKKZCbHTY6aRR46gxiqszMk5tcHjsVFxnUo8VMus4kHGVdIYVbOYYNlKmHV"
@@ -17,13 +17,13 @@
 			});
 		});
 	</script>
-	{{#>head}}{{/head}}
+    {{ block "head" . }}{{ end }}
 </head>
 <body>
 <section class="section">
 	<div class="container">
 		<div class="content">
-			{{>content}}
+			{{ template "content" . }}
 		</div>
 	</div>
 </section>

@@ -1,11 +1,30 @@
-<div class="card mb-3" id="list-{{.ID}}">
+<div class="card mb-3" id="list-{{.List.ID}}">
 	<header class="card-header">
 		<p class="card-header-title">
-            {{if .Name}}
-                {{.Name}}
-            {{else}}
-				(Untitled List)
-            {{end}}
+            {{ if .EditingName }}
+				<form hx-patch="/lists/{{.List.ID}}"
+					  hx-target="#list-{{.List.ID}}"
+					  hx-swap="outerHTML">
+					<input type="text"
+						   value="{{.List.Name}}"
+						   class="input"
+						   placeholder="Name"
+						   aria-label="Name"
+						   name="name">
+					<button class="button is-link">Save</button>
+				</form>
+			{{ else }}
+				{{if .List.Name}}
+					{{.List.Name}}
+				{{else}}
+					(Untitled List)
+				{{end}}
+				<button type="button"
+						class="button is-link"
+						hx-get="/lists/{{.List.ID}}/edit"
+						hx-target="#list-{{.List.ID}}">Edit
+				</button>
+			{{ end }}
 		</p>
 	</header>
 	<div class="card-content">
@@ -22,8 +41,8 @@
 		<a href="#" class="card-footer-item">Edit</a>
 		<a href="#" class="card-footer-item"
 		   hx-confirm="Are you sure you want to delete this list?"
-		   hx-delete="/lists/{{list.id}}"
-		   hx-target="#list-{{list.id}}"
+		   hx-delete="/lists/{{.List.ID}}"
+		   hx-target="#list-{{.List.ID}}"
 		   hx-swap="delete">Delete</a>
 	</footer>
 </div>

@@ -8,6 +8,7 @@ import (
 	"html/template"
 	"io"
 	"io/fs"
+	"log"
 	"os"
 	"strings"
 )
@@ -128,11 +129,12 @@ func New(config *Config) echo.Renderer {
 	}
 
 	v := view{
-		config: config,
-		fs:     internalFS,
-		views:  make(map[string]*template.Template),
+		config:                 config,
+		fs:                     internalFS,
+		views:                  make(map[string]*template.Template),
+		viewPartialCollections: make(map[string]*template.Template),
 	}
-	v.init()
+	v.init(true)
 	return &v
 }
 
@@ -151,14 +153,43 @@ type Config struct {
 }
 
 type view struct {
-	config         *Config
-	fs             FS
-	views          map[string]*template.Template
-	sharedPartials *template.Template
+	config                 *Config
+	fs                     FS
+	views                  map[string]*template.Template
+	viewPartialCollections map[string]*template.Template
+	sharedPartials         *template.Template
 }
 
-func (v *view) init() {
-	v.loadSharedPartials()
+func (v *view) init(debug bool) {
+	sharedPartials := v.loadSharedPartials()
+	layouts := v.listLayouts()
+	viewDirs := v.listViewDirs()
+
+	for _, viewDir := range viewDirs {
+		views, partials := v.scanViewDir(viewDir)
+
+		if len(partials) > 0 {
+			key := strings.Replace(viewDir, "views/", "", 1)
+			v.viewPartialCollections[key] = template.Must(template.ParseFS(v.fs, partials...))
+		}
+
+		for _, view := range views {
+			allTemplates := make([]string, 0, len(sharedPartials)+len(layouts)+len(partials)+1)
+			allTemplates = append(allTemplates, "views/layouts/main.html")
+			allTemplates = append(allTemplates, view)
+			allTemplates = append(allTemplates, sharedPartials...)
+			allTemplates = append(allTemplates, partials...)
+
+			tmpl := template.Must(template.ParseFS(v.fs, allTemplates...))
+
+			viewName := strings.Replace(view, "views/", "", 1)
+			v.views[viewName] = tmpl
+
+			if debug {
+				log.Println("loaded template:", viewName)
+			}
+		}
+	}
 }
 
 func (v *view) mustParseKey(key string) viewKey {
@@ -181,22 +212,70 @@ type viewKey struct {
 	isShared  bool
 }
 
-func (v *view) loadSharedPartials() {
-	entries, err := v.fs.ReadDir("views/shared")
+// loadSharedPartials loads all partials in the "shared" view directory and returns their paths.
+func (v *view) loadSharedPartials() []string {
+	partials := v.listPartials("shared")
+
+	v.sharedPartials = template.Must(template.ParseFS(v.fs, partials...))
+	return partials
+}
+
+func (v *view) listLayouts() []string {
+	entries, err := v.fs.ReadDir("views/layouts")
 	if err != nil {
 		panic(err)
 	}
 
-	partials := make([]string, 0, len(entries))
+	layouts := make([]string, 0, len(entries))
 	for _, f := range entries {
-		if isPartial(f) {
-			partials = append(partials, "views/shared/"+f.Name())
+		if isTemplate(f) {
+			layouts = append(layouts, "views/layouts/"+f.Name())
 		}
 	}
-
-	v.sharedPartials = template.Must(template.ParseFS(v.fs, partials...))
+	return layouts
 }
 
+// scanViewDir returns a list of all views and partials in the given view directory.
+func (v *view) scanViewDir(viewDir string) (views []string, partials []string) {
+	entries, err := v.fs.ReadDir("views/" + viewDir)
+	if err != nil {
+		panic(err)
+	}
+
+	views = make([]string, 0, len(entries))
+	partials = make([]string, 0, len(entries))
+
+	for _, f := range entries {
+		if !isTemplate(f) {
+			continue
+		}
+
+		if isPartial(f) {
+			partials = append(partials, "views/"+viewDir+"/"+f.Name())
+		} else {
+			views = append(views, "views/"+viewDir+"/"+f.Name())
+		}
+	}
+	return views, partials
+}
+
+// listViewDirs returns a list of all view directories other than "shared" or "layouts"
+func (v *view) listViewDirs() []string {
+	entries, err := v.fs.ReadDir("views")
+	if err != nil {
+		panic(err)
+	}
+
+	viewDirs := make([]string, 0, len(entries))
+	for _, f := range entries {
+		if f.IsDir() && f.Name() != "shared" && f.Name() != "layouts" {
+			viewDirs = append(viewDirs, f.Name())
+		}
+	}
+	return viewDirs
+}
+
+// listPartials returns a list of all partials in the given view directory.
 func (v *view) listPartials(viewDir string) []string {
 	entries, err := v.fs.ReadDir("views/" + viewDir)
 	if err != nil {
@@ -212,20 +291,21 @@ func (v *view) listPartials(viewDir string) []string {
 	return partials
 }
 
-func (v *view) listViews(viewDir string) []string {
-	entries, err := v.fs.ReadDir("views/" + viewDir)
-	if err != nil {
-		panic(err)
-	}
-
-	templates := make([]string, 0, len(entries))
-	for _, f := range entries {
-		if isTemplate(f) && !strings.HasPrefix(f.Name(), "_") {
-			templates = append(templates, "views/"+viewDir+"/"+f.Name())
-		}
-	}
-	return templates
-}
+//// listViews returns a list of all views in the given view directory.
+//func (v *view) listViews(viewDir string) []string {
+//	entries, err := v.fs.ReadDir("views/" + viewDir)
+//	if err != nil {
+//		panic(err)
+//	}
+//
+//	templates := make([]string, 0, len(entries))
+//	for _, f := range entries {
+//		if isTemplate(f) && !strings.HasPrefix(f.Name(), "_") {
+//			templates = append(templates, "views/"+viewDir+"/"+f.Name())
+//		}
+//	}
+//	return templates
+//}
 
 // isTemplate returns true if the path has a .html extension.
 func isTemplate(path fs.DirEntry) bool {
@@ -239,52 +319,40 @@ func isPartial(path fs.DirEntry) bool {
 }
 
 func (v *view) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
-	parts := strings.SplitN(name, "/", 2)
-	viewDir := parts[0]
-	if strings.Contains(parts[1], "/") {
-		panic("subdirectories not supported")
+	key := v.mustParseKey(name)
+
+	if v.config.CompileOnRender {
+		v.init(false)
 	}
 
-	baseFile := "views/" + name
-
-	allViewDirEntries, err := os.ReadDir("views/" + viewDir)
-	if err != nil {
-		panic(err)
-	}
-
-	globalPartialEntries, err := os.ReadDir("views/shared")
-	if err != nil {
-		panic(err)
-	}
-	globalPartials := make([]string, 0, len(globalPartialEntries))
-	for _, f := range globalPartialEntries {
-		if !isPartial(f) {
-			continue
+	if key.isShared {
+		if err := v.sharedPartials.ExecuteTemplate(w, key.name, data); err != nil {
+			if tplErr, ok := err.(*template.Error); ok && tplErr.ErrorCode == template.ErrNoSuchTemplate {
+				return fmt.Errorf("template not found: %s", name)
+			} else {
+				panic(err)
+			}
 		}
-		globalPartials = append(globalPartials, "views/shared/"+f.Name())
+		return nil
 	}
 
-	viewPartials := make([]string, 0, 5)
-	for _, f := range allViewDirEntries {
-		if !isPartial(f) {
-			continue
+	if key.isPartial {
+		tmpl, ok := v.viewPartialCollections[key.viewDir]
+		if !ok {
+			return fmt.Errorf("template not found: %s", name)
 		}
-		viewPartials = append(viewPartials, "views/"+viewDir+"/"+f.Name())
+		if err := tmpl.ExecuteTemplate(w, key.name, data); err != nil {
+			panic(err)
+		}
+		return nil
 	}
 
-	allTemplates := make([]string, 0, len(globalPartials)+len(viewPartials)+1)
-	allTemplates = append(allTemplates, baseFile)
-	for _, f := range globalPartials {
-		allTemplates = append(allTemplates, f)
-	}
-	// View partials override global partials
-	for _, f := range viewPartials {
-		allTemplates = append(allTemplates, f)
+	tmpl, ok := v.views[name]
+	if !ok {
+		return fmt.Errorf("template not found: %s", name)
 	}
 
-	tmpl := template.Must(template.ParseFiles(allTemplates...))
-
-	if err = tmpl.Execute(w, data); err != nil {
+	if err := tmpl.Execute(w, data); err != nil {
 		panic(err)
 	}
 

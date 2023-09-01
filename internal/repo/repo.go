@@ -123,11 +123,9 @@ func (r *repository) UpdateListById(ctx context.Context, id int64, name string) 
 
 func (r *repository) DeleteListById(ctx context.Context, id int64) error {
 	deleteStmt := List.DELETE().
-		WHERE(List.ID.EQ(Int(id))).
-		RETURNING(List.ID)
+		WHERE(List.ID.EQ(Int(id)))
 
-	var result int64
-	if err := deleteStmt.QueryContext(ctx, r.dbtx, &result); err != nil {
+	if _, err := deleteStmt.ExecContext(ctx, r.dbtx); err != nil {
 		return err
 	}
 
