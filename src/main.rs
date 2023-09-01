@@ -1,7 +1,7 @@
 use std::env;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use axum::extract::Path;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
@@ -50,9 +50,23 @@ async fn main() -> anyhow::Result<()> {
         Err(_) => println!("No .env file found"),
     }
     let database_url = env::var("DATABASE_URL").expect("DATABASE_URL not found in environment");
+    let host: IpAddr = match env::var("HOST") {
+        Ok(host) => {
+            let parts = host.split(".");
+            let mut octets: [u8; 4] = [0, 0, 0, 0];
+            for (i, part) in parts.enumerate() {
+                if i > 3 {
+                    return Err(anyhow!("could not parse HOST"));
+                }
+                octets[i] = part.parse::<u8>().context("could not parse HOST")?;
+            }
+            IpAddr::from(octets)
+        }
+        Err(_) => IpAddr::from([0, 0, 0, 0]),
+    };
     let port: u16 = match env::var("PORT") {
         Ok(port) => port.parse::<u16>().context("could not parse PORT")?,
-        Err(_) => 8000,
+        Err(_) => 8080,
     };
 
     tracing_subscriber::fmt::init();
@@ -66,8 +80,8 @@ async fn main() -> anyhow::Result<()> {
     let mut hbs = Handlebars::new();
     hbs.register_template_file("layouts/main", "./views/layouts/main.hbs")
         .context("could not register layouts/main template")?;
-    hbs.register_template_file("shared/_head", "./views/shared/_head.hbs")
-        .context("could not register shared/head template")?;
+    // hbs.register_template_file("shared/_head", "./views/shared/_head.hbs")
+    //     .context("could not register shared/head template")?;
     hbs.register_template_file("lists/index", "./views/lists/index.hbs")
         .context("could not register lists/index template")?;
     hbs.register_template_file("lists/_form", "./views/lists/_form.hbs")
@@ -88,7 +102,7 @@ async fn main() -> anyhow::Result<()> {
         .with_state(shared_state)
         .layer(TraceLayer::new_for_http());
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    let addr = SocketAddr::from((host, port));
     println!("listening on {}", addr);
 
     axum::Server::bind(&addr)
