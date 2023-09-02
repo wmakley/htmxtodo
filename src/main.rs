@@ -7,6 +7,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::Form;
 use axum::{
+    error_handling::HandleErrorLayer,
     extract::{FromRef, State},
     routing::{delete, get},
     Router,
@@ -15,25 +16,31 @@ use axum_template::{engine::Engine, RenderHtml};
 use chrono;
 use dotenvy::dotenv;
 use handlebars::Handlebars;
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-use sqlx::pool::Pool;
-use sqlx::postgres::{PgPoolOptions, Postgres};
+use serde::Deserialize;
+use serde_json::{json, Value};
+use sqlx::postgres::PgPoolOptions;
+use std::time::Duration;
+use tower::ServiceBuilder;
 use tower_http::trace::TraceLayer;
 use tracing::debug;
 
+mod db;
+mod error;
+
+use error::AppError;
+
 type TemplateEngine = Engine<Handlebars<'static>>;
-type DatabasePool = Pool<Postgres>;
+type Page = RenderHtml<String, TemplateEngine, Value>;
 
 #[derive(Clone)]
 struct AppState {
     template_engine: TemplateEngine,
-    database_pool: DatabasePool,
+    repo: db::Repo,
 }
 
-impl FromRef<AppState> for DatabasePool {
-    fn from_ref(app_state: &AppState) -> DatabasePool {
-        app_state.database_pool.clone()
+impl FromRef<AppState> for db::Repo {
+    fn from_ref(app_state: &AppState) -> db::Repo {
+        app_state.repo.clone()
     }
 }
 
@@ -91,7 +98,7 @@ async fn main() -> anyhow::Result<()> {
 
     let shared_state = AppState {
         template_engine: Engine::from(hbs),
-        database_pool: pool,
+        repo: db::Repo::new(pool),
     };
 
     let app = Router::new()
@@ -100,7 +107,14 @@ async fn main() -> anyhow::Result<()> {
         .route("/lists/:id", delete(delete_list).patch(update_list))
         .route("/lists/:id/edit", get(edit_list))
         .with_state(shared_state)
-        .layer(TraceLayer::new_for_http());
+        .layer(TraceLayer::new_for_http())
+        .layer(
+            ServiceBuilder::new()
+                // `timeout` will produce an error if the handler takes
+                // too long so we must handle those
+                .layer(HandleErrorLayer::new(handle_timeout_error))
+                .timeout(Duration::from_secs(30)),
+        );
 
     let addr = SocketAddr::from((host, port));
     println!("listening on {}", addr);
@@ -111,37 +125,38 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[derive(sqlx::FromRow, Deserialize, Serialize)]
-pub struct List {
-    pub id: i64,
-    pub name: String,
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    pub updated_at: chrono::DateTime<chrono::Utc>,
+async fn handle_timeout_error(err: axum::BoxError) -> (StatusCode, String) {
+    if err.is::<tower::timeout::error::Elapsed>() {
+        (
+            StatusCode::REQUEST_TIMEOUT,
+            "Request took too long".to_string(),
+        )
+    } else {
+        (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Unhandled internal error: {}", err),
+        )
+    }
 }
 
-async fn lists_index(State(state): State<AppState>) -> impl IntoResponse {
-    let sql = "SELECT * FROM list ORDER BY id".to_string();
+async fn lists_index(State(state): State<AppState>) -> Result<Page, AppError> {
+    let lists = state.repo.filter_lists().await?;
 
-    let lists = sqlx::query_as::<_, List>(&sql)
-        .fetch_all(&state.database_pool)
-        .await
-        .unwrap();
-
-    let new_list = List {
+    let new_list = db::List {
         id: 0,
         name: "".to_string(),
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
     };
 
-    RenderHtml(
+    Ok(RenderHtml(
         "lists/index".to_string(),
         state.template_engine,
         json!({
             "lists": lists,
             "new_list": new_list,
         }),
-    )
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -152,86 +167,59 @@ pub struct CreateListForm {
 async fn create_list(
     State(state): State<AppState>,
     Form(form): Form<CreateListForm>,
-) -> impl IntoResponse {
+) -> Result<(StatusCode, Page), AppError> {
     debug!("create_list form: {:?}", form);
 
     let name = form.name.trim();
     if name.is_empty() {
-        // TODO
-        return (StatusCode::BAD_REQUEST, "name cannot be empty").into_response();
+        return Ok((
+            StatusCode::BAD_REQUEST,
+            RenderHtml(
+                "lists/_form".to_string(),
+                state.template_engine,
+                json!({
+                    "list": db::List {
+                        id: 0,
+                        name: name.to_string(),
+                        created_at: chrono::Utc::now(),
+                        updated_at: chrono::Utc::now(),
+                    },
+                    "errors": vec!["name cannot be empty".to_string()],
+                }),
+            ),
+        ));
     }
 
-    let sql = "INSERT INTO list (name) VALUES ($1) RETURNING *".to_string();
+    let list = state.repo.create_list(name).await?;
 
-    let list = sqlx::query_as::<_, List>(&sql)
-        .bind(name)
-        .fetch_one(&state.database_pool)
-        .await
-        .unwrap();
-
-    RenderHtml(
-        "lists/_card".to_string(),
-        state.template_engine,
-        json!({
-            "list": list,
-            "editing_name": false,
-        }),
-    )
-    .into_response()
+    Ok((
+        StatusCode::OK,
+        RenderHtml(
+            "lists/_card".to_string(),
+            state.template_engine,
+            json!({
+                "list": list,
+                "editing_name": false,
+            }),
+        ),
+    ))
 }
 
-async fn delete_list(State(state): State<AppState>, Path(id): Path<i64>) -> impl IntoResponse {
-    debug!("delete_list id: {:?}", id);
-
-    let sql = "DELETE FROM list WHERE id = $1".to_string();
-
-    sqlx::query(&sql)
-        .bind(id)
-        .execute(&state.database_pool)
-        .await
-        .unwrap();
-
-    (StatusCode::NO_CONTENT, "")
-}
-
-// Make our own error that wraps `anyhow::Error`.
-struct AppError(anyhow::Error);
-
-// Tell axum how to convert `AppError` into a response.
-impl IntoResponse for AppError {
-    fn into_response(self) -> Response {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Something went wrong: {}", self.0),
-        )
-            .into_response()
-    }
-}
-
-// This enables using `?` on functions that return `Result<_, anyhow::Error>` to turn them into
-// `Result<_, AppError>`. That way you don't need to do that manually.
-impl<E> From<E> for AppError
-where
-    E: Into<anyhow::Error>,
-{
-    fn from(err: E) -> Self {
-        Self(err.into())
-    }
-}
-
-#[axum::debug_handler]
-async fn edit_list(
+async fn delete_list(
     State(state): State<AppState>,
     Path(id): Path<i64>,
-) -> Result<Response, AppError> {
+) -> Result<StatusCode, AppError> {
+    debug!("delete_list id: {:?}", id);
+
+    state.repo.delete_list(id).await?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn edit_list(State(state): State<AppState>, Path(id): Path<i64>) -> Result<Page, AppError> {
     debug!("edit_list id: {:?}", id);
 
-    let sql = "SELECT * FROM list WHERE id = $1".to_string();
-
-    let list = sqlx::query_as::<_, List>(&sql)
-        .bind(id)
-        .fetch_one(&state.database_pool)
-        .await?;
+    let list = state.repo.get_list(id).await?;
 
     Ok(RenderHtml(
         "lists/_card".to_string(),
@@ -240,8 +228,7 @@ async fn edit_list(
             "list": list,
             "editing_name": true,
         }),
-    )
-    .into_response())
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -253,37 +240,18 @@ async fn update_list(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Form(form): Form<UpdateListForm>,
-) -> impl IntoResponse {
+) -> Result<Response, AppError> {
     debug!("update_list id: {:?}", id);
 
     let name = form.name.trim();
     if name.is_empty() {
         // TODO
-        return (StatusCode::BAD_REQUEST, "name cannot be empty").into_response();
+        return Ok((StatusCode::BAD_REQUEST, "name cannot be empty").into_response());
     }
 
-    let mut transaction = state.database_pool.begin().await.unwrap();
+    let list = state.repo.update_list(id, name).await?;
 
-    let sql = "SELECT * FROM list WHERE id = $1".to_string();
-
-    let list = sqlx::query_as::<_, List>(&sql)
-        .bind(id)
-        .fetch_one(&mut *transaction)
-        .await
-        .unwrap();
-
-    let sql = "UPDATE list SET name = $1, updated_at = NOW() WHERE id = $2 RETURNING *".to_string();
-
-    let list = sqlx::query_as::<_, List>(&sql)
-        .bind(name)
-        .bind(id)
-        .fetch_one(&mut *transaction)
-        .await
-        .unwrap();
-
-    transaction.commit().await.unwrap();
-
-    RenderHtml(
+    Ok(RenderHtml(
         "lists/_card".to_string(),
         state.template_engine,
         json!({
@@ -291,5 +259,5 @@ async fn update_list(
             "editing_name": false,
         }),
     )
-    .into_response()
+    .into_response())
 }

@@ -22,7 +22,8 @@
 			<button type="button"
 					class="button is-link"
 					hx-get="/lists/{{list.id}}/edit"
-					hx-target="#list-{{list.id}}">Edit
+					hx-target="#list-{{list.id}}"
+					hx-swap="outerHTML">Edit
 			</button>
 		{{/if}}
 	</p>
