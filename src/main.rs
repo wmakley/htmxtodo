@@ -107,14 +107,14 @@ async fn main() -> anyhow::Result<()> {
         .route("/lists/:id", delete(delete_list).patch(update_list))
         .route("/lists/:id/edit", get(edit_list))
         .with_state(shared_state)
-        .layer(TraceLayer::new_for_http())
-        .layer(
-            ServiceBuilder::new()
-                // `timeout` will produce an error if the handler takes
-                // too long so we must handle those
-                .layer(HandleErrorLayer::new(handle_timeout_error))
-                .timeout(Duration::from_secs(30)),
-        );
+        .layer(TraceLayer::new_for_http());
+    // .layer(
+    //     ServiceBuilder::new()
+    //         // `timeout` will produce an error if the handler takes
+    //         // too long so we must handle those
+    //         .layer(HandleErrorLayer::new(handle_timeout_error))
+    //         .timeout(Duration::from_secs(30)),
+    // );
 
     let addr = SocketAddr::from((host, port));
     println!("listening on {}", addr);

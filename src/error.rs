@@ -2,7 +2,7 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use sqlx;
 // use axum_template::{engine::Engine, RenderHtml};
-// use tracing::debug;
+use tracing::error;
 
 #[derive(Debug)]
 pub enum AppError {
@@ -15,6 +15,8 @@ pub enum AppError {
 // Tell axum how to convert `AppError` into a response.
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
+        error!("{:?}", self);
+
         match self {
             AppError::RecordNotFound(record, id) => (
                 StatusCode::NOT_FOUND,
@@ -38,6 +40,21 @@ impl IntoResponse for AppError {
     }
 }
 
+impl From<sqlx::Error> for AppError {
+    fn from(err: sqlx::Error) -> Self {
+        match err {
+            sqlx::Error::RowNotFound => Self::NotFound,
+            _ => Self::Sqlx(err),
+        }
+    }
+}
+
+impl From<anyhow::Error> for AppError {
+    fn from(err: anyhow::Error) -> Self {
+        Self::Other(err)
+    }
+}
+
 // This enables using `?` on functions that return `Result<_, anyhow::Error>` to turn them into
 // `Result<_, AppError>`. That way you don't need to do that manually.
 // impl<E> From<E> for AppError
@@ -48,12 +65,3 @@ impl IntoResponse for AppError {
 //         Self::Other(err.into())
 //     }
 // }
-
-impl From<sqlx::Error> for AppError {
-    fn from(err: sqlx::Error) -> Self {
-        match err {
-            sqlx::Error::RowNotFound => Self::NotFound,
-            _ => Self::Sqlx(err),
-        }
-    }
-}
