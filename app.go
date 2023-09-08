@@ -3,10 +3,12 @@ package main
 import (
 	"database/sql"
 	"embed"
-	"fmt"
+	"errors"
+	"github.com/gofiber/fiber/v2"
+	globalLog "github.com/gofiber/fiber/v2/log"
+	"github.com/gofiber/fiber/v2/middleware/logger"
+	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/joho/godotenv"
-	"github.com/labstack/echo/v4/middleware"
-	log2 "github.com/labstack/gommon/log"
 	_ "github.com/lib/pq"
 	"htmxtodo/gen/htmxtodo_dev/public/model"
 	repo2 "htmxtodo/internal/repo"
@@ -15,8 +17,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-
-	"github.com/labstack/echo/v4"
 )
 
 //go:embed all:views/*
@@ -46,72 +46,81 @@ func main() {
 
 	repo := repo2.New(db)
 
-	e := echo.New()
-
-	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
-
-	e.HTTPErrorHandler = customHTTPErrorHandler
-
-	e.Renderer = view.New(&view.Config{
-		CompileOnRender: env == "development",
-		Path:            "views",
-		EmbedFS:         viewsFS,
+	app := fiber.New(fiber.Config{
+		AppName:      "HtmxTodo 0.1.0",
+		ErrorHandler: errorHandler,
+		Views: view.New(&view.Config{
+			CompileOnRender: env == "development",
+			Path:            "views",
+			EmbedFS:         viewsFS,
+		}),
 	})
 
-	r := e.GET("/", func(c echo.Context) error {
-		return c.Redirect(http.StatusFound, "/lists")
+	app.Use(logger.New(logger.Config{
+		DisableColors: env != "development",
+	}))
+	app.Use(recover.New(recover.Config{
+		EnableStackTrace: env == "development",
+	}))
+
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.Redirect("/lists", http.StatusFound)
 	})
-	r.Name = "root"
 
 	lists := ListsHandlers{repo: repo}
 
-	r = e.GET("/lists", lists.Index)
-	r.Name = "lists-index"
-	r = e.GET("/lists/:id", lists.Show)
-	r.Name = "lists-show"
-	r = e.POST("/lists", lists.Create)
-	r.Name = "lists-create"
-	r = e.GET("/lists/:id/edit", lists.Edit)
-	r.Name = "lists-edit"
-	r = e.PATCH("/lists/:id", lists.Update)
-	r.Name = "lists-update"
-	r = e.DELETE("/lists/:id", lists.Delete)
-	r.Name = "lists-delete"
+	app.Get("/lists", lists.Index)
+	app.Get("/lists/:id", lists.Show)
+	app.Post("/lists", lists.Create)
+	app.Get("/lists/:id/edit", lists.Edit)
+	app.Patch("/lists/:id", lists.Update)
+	app.Delete("/lists/:id", lists.Delete)
 
-	e.Logger.SetLevel(log2.DEBUG)
+	//e.Logger.SetLevel(log2.DEBUG)
 
-	e.Logger.Fatal(e.Start(host + ":" + port))
+	log.Fatal(app.Listen(host + ":" + port))
 }
 
-func customHTTPErrorHandler(err error, c echo.Context) {
-	c.Logger().Error(err)
+func errorHandler(c *fiber.Ctx, err error) error {
+	// Status code defaults to 500
+	code := fiber.StatusInternalServerError
+	msg := err.Error()
 
-	code := http.StatusInternalServerError
-	msg := "Internal Server Error"
-	if he, ok := err.(*echo.HTTPError); ok {
-		code = he.Code
-		msg = he.Error()
+	// Retrieve the custom status code if it's a *fiber.Error
+	var e *fiber.Error
+	if errors.As(err, &e) {
+		code = e.Code
 	}
 
-	if code == http.StatusNotFound {
-		errorPage := fmt.Sprintf("errors/%d.html", code)
+	// Special handling for other error types
+	if errors.Is(err, sql.ErrNoRows) {
+		code = fiber.StatusNotFound
+	}
 
-		templateErr := c.Render(code, errorPage, echo.Map{
-			"Title":      fmt.Sprintf("Error %d", code),
+	// Parameter decoding errors are errors bad route, meaning not found (but may also be bugs)
+	if strings.HasPrefix(msg, "failed to decode:") {
+		code = fiber.StatusNotFound
+	}
+
+	// Render a template for 404 errors
+	if code == fiber.StatusNotFound {
+		return c.Render("errors/404.html", fiber.Map{
+			"Title":      "Error 404",
 			"StatusCode": code,
 		})
-		if templateErr == nil {
-			return
-		}
-
-		c.Logger().Error(templateErr)
 	}
 
-	text := fmt.Sprintf("%d - %s", code, msg)
-	if textErr := c.Blob(code, echo.MIMETextPlainCharsetUTF8, []byte(text)); textErr != nil {
-		panic(textErr)
+	// Set Default Content-Type: text/plain; charset=utf-8
+	c.Set(fiber.HeaderContentType, fiber.MIMETextPlainCharsetUTF8)
+
+	// Hide internal server error messages from external users
+	if code == fiber.StatusInternalServerError {
+		globalLog.Error(msg)
+		msg = "500 Internal Server Error"
 	}
+
+	// Return status code with error message
+	return c.Status(code).SendString(msg)
 }
 
 type ListsHandlers struct {
@@ -123,9 +132,8 @@ type CardView struct {
 	List        model.List
 }
 
-func (l *ListsHandlers) Index(c echo.Context) error {
-
-	results, err := l.repo.FilterLists(c.Request().Context())
+func (l *ListsHandlers) Index(c *fiber.Ctx) error {
+	results, err := l.repo.FilterLists(c.Context())
 	if err != nil {
 		return err
 	}
@@ -138,46 +146,46 @@ func (l *ListsHandlers) Index(c echo.Context) error {
 		}
 	}
 
-	return c.Render(http.StatusOK, "lists/index.html", echo.Map{
+	return c.Render("lists/index.html", fiber.Map{
 		"Title":   "Lists",
 		"Lists":   viewObjects,
 		"NewList": model.List{},
 	})
 }
 
-type ShowListParams struct {
-	ID int64 `param:"id"`
-}
-
-func (l *ListsHandlers) Show(c echo.Context) error {
-	var params ShowListParams
-	if err := c.Bind(&params); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+func (l *ListsHandlers) Show(c *fiber.Ctx) error {
+	var params struct {
+		ID int64 `params:"id"`
+	}
+	if err := c.ParamsParser(&params); err != nil {
+		return fiber.NewError(http.StatusBadRequest, err.Error())
 	}
 
-	result, err := l.repo.GetListById(c.Request().Context(), params.ID)
+	result, err := l.repo.GetListById(c.Context(), params.ID)
 	if err != nil {
 		return err
 	}
 
-	return c.Render(http.StatusOK, "lists/show.html", echo.Map{
+	return c.Render("lists/show.html", fiber.Map{
 		"Title": "List",
 		"List":  result,
 	})
 }
 
-func (l *ListsHandlers) Edit(c echo.Context) error {
-	var params ShowListParams
-	if err := c.Bind(&params); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+func (l *ListsHandlers) Edit(c *fiber.Ctx) error {
+	var params struct {
+		ID int64 `params:"id"`
+	}
+	if err := c.ParamsParser(&params); err != nil {
+		return fiber.NewError(http.StatusBadRequest, err.Error())
 	}
 
-	result, err := l.repo.GetListById(c.Request().Context(), params.ID)
+	result, err := l.repo.GetListById(c.Context(), params.ID)
 	if err != nil {
 		return err
 	}
 
-	return c.Render(http.StatusOK, "lists/_card.html", CardView{
+	return c.Render("lists/_card.html", CardView{
 		EditingName: true,
 		List:        result,
 	})
@@ -187,67 +195,75 @@ type CreateListRequest struct {
 	Name string `json:"name" form:"name"`
 }
 
-func (l *ListsHandlers) Create(c echo.Context) error {
+func (l *ListsHandlers) Create(c *fiber.Ctx) error {
 	var req CreateListRequest
 
-	err := c.Bind(&req)
-	if err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
-	}
-
-	req.Name = strings.TrimSpace(req.Name)
-	if req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
-	}
-
-	result, err := l.repo.CreateList(c.Request().Context(), req.Name)
+	err := c.BodyParser(&req)
 	if err != nil {
 		return err
 	}
 
-	return c.Render(http.StatusOK, "lists/_card.html", CardView{
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		return fiber.NewError(http.StatusBadRequest, "name is required")
+	}
+
+	result, err := l.repo.CreateList(c.Context(), req.Name)
+	if err != nil {
+		return err
+	}
+
+	return c.Render("lists/_card.html", CardView{
 		EditingName: false,
 		List:        result,
 	})
 }
 
 type UpdateListRequest struct {
-	ID   int64  `param:"id"`
 	Name string `json:"name" form:"name"`
 }
 
-func (l *ListsHandlers) Update(c echo.Context) error {
+func (l *ListsHandlers) Update(c *fiber.Ctx) error {
+	var params struct {
+		ID int64 `params:"id"`
+	}
+	if err := c.ParamsParser(&params); err != nil {
+		return err
+	}
+
 	var req UpdateListRequest
-	if err := c.Bind(&req); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+	if err := c.BodyParser(&req); err != nil {
+		return err
 	}
 
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, "name is required")
+		return fiber.NewError(http.StatusBadRequest, "name is required")
 	}
 
-	list, err := l.repo.UpdateListById(c.Request().Context(), req.ID, req.Name)
+	list, err := l.repo.UpdateListById(c.Context(), params.ID, req.Name)
 	if err != nil {
 		return err
 	}
 
-	return c.Render(http.StatusOK, "lists/_card.html", CardView{
+	return c.Render("lists/_card.html", CardView{
 		EditingName: false,
 		List:        list,
 	})
 }
 
-func (l *ListsHandlers) Delete(c echo.Context) error {
-	var params ShowListParams
-	if err := c.Bind(&params); err != nil {
-		return echo.NewHTTPError(http.StatusBadRequest, err.Error())
+func (l *ListsHandlers) Delete(c *fiber.Ctx) error {
+	var params struct {
+		ID int64 `params:"id"`
+	}
+	if err := c.ParamsParser(&params); err != nil {
+		return fiber.NewError(http.StatusBadRequest, err.Error())
 	}
 
-	err := l.repo.DeleteListById(c.Request().Context(), params.ID)
+	err := l.repo.DeleteListById(c.Context(), params.ID)
 	if err != nil {
 		return err
 	}
 
-	return c.Blob(http.StatusNoContent, echo.MIMETextPlainCharsetUTF8, []byte{})
+	return c.SendStatus(http.StatusNoContent)
 }

@@ -2,121 +2,16 @@ package view
 
 import (
 	"embed"
-	"errors"
 	"fmt"
-	"github.com/labstack/echo/v4"
+	"github.com/gofiber/fiber/v2"
 	"html/template"
 	"io"
 	"io/fs"
-	"log"
 	"os"
 	"strings"
 )
 
-// NewEmbeddedTemplateRenderer returns a renderer that uses the given embed.FS to pre-compile all templates.
-func NewEmbeddedTemplateRenderer(fs embed.FS) echo.Renderer {
-	views := make(map[string]*template.Template)
-
-	topLevelEntries, err := fs.ReadDir("views")
-	if err != nil {
-		panic(err)
-	}
-
-	topLevelDirNames := make([]string, 0)
-	for _, f := range topLevelEntries {
-		if f.IsDir() && f.Name() != "shared" {
-			topLevelDirNames = append(topLevelDirNames, f.Name())
-		}
-	}
-
-	globalSharedTemplateEntries, err := fs.ReadDir("views/shared")
-	if err != nil {
-		panic(err)
-	}
-
-	// Create a list of all global shared templates, to be included in every template
-	globalSharedTemplates := make([]string, 0, len(globalSharedTemplateEntries))
-	for _, f := range globalSharedTemplateEntries {
-		if f.IsDir() {
-			continue
-		}
-		globalSharedTemplates = append(globalSharedTemplates, fmt.Sprintf("views/shared/%s", f.Name()))
-	}
-
-	for _, topLevelDirName := range topLevelDirNames {
-		entries, err := fs.ReadDir(fmt.Sprintf("views/%s", topLevelDirName))
-		if err != nil {
-			panic(err)
-		}
-
-		// Create a list of all templates in the directory
-		templates := make([]string, 0, len(entries))
-
-		for _, f := range entries {
-			if f.IsDir() {
-				continue
-			}
-			templates = append(templates, fmt.Sprintf("views/%s/%s", topLevelDirName, f.Name()))
-		}
-
-		// Get the paths of all shared templates for the directory
-		sharedEntries, err := fs.ReadDir(fmt.Sprintf("views/%s/shared", topLevelDirName))
-		if err != nil {
-			if !errors.Is(err, os.ErrNotExist) {
-				panic(err)
-			}
-			sharedEntries = make([]os.DirEntry, 0)
-		}
-
-		localShared := make([]string, 0, len(sharedEntries))
-		for _, f := range sharedEntries {
-			if f.IsDir() {
-				continue
-			}
-			localShared = append(localShared, fmt.Sprintf("views/%s/shared/%s", topLevelDirName, f.Name()))
-		}
-
-		// Compile each template with all shared templates
-		for _, templatePath := range templates {
-			allTemplates := make([]string, 0, len(localShared)+len(globalSharedTemplates)+1)
-			allTemplates = append(allTemplates, templatePath)
-
-			// TODO: local should override global, not sure what will happen here
-			allTemplates = append(allTemplates, localShared...)
-			allTemplates = append(allTemplates, globalSharedTemplates...)
-
-			viewName := strings.Replace(templatePath, "views/", "", 1)
-			views[viewName] = template.Must(template.ParseFS(fs, allTemplates...))
-		}
-	}
-
-	return &embeddedTemplateRenderer{
-		views: views,
-	}
-}
-
-type embeddedTemplateRenderer struct {
-	views map[string]*template.Template
-}
-
-func (t *embeddedTemplateRenderer) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
-	// Panic on all template render errors.
-	// They are all hard programmer mistakes that must be fixed.
-
-	tmpl, ok := t.views[name]
-	if !ok {
-		panic(fmt.Sprintf("template not found: %s", name))
-	}
-
-	if err := tmpl.Execute(w, data); err != nil {
-		panic(err)
-	}
-
-	return nil
-}
-
-// New is a embeddedTemplateRenderer that compiles templates on every request. Good for development.
-func New(config *Config) echo.Renderer {
+func New(config *Config) fiber.Views {
 	if config == nil {
 		panic("config is nil")
 	}
@@ -134,14 +29,13 @@ func New(config *Config) echo.Renderer {
 		views:                  make(map[string]*template.Template),
 		viewPartialCollections: make(map[string]*template.Template),
 	}
-	v.init(true)
+	//v.init(true)
 	return &v
 }
 
 // FS has all file system interfaces needed by view.
 type FS interface {
 	fs.FS
-	//fs.ReadFileFS
 	fs.ReadDirFS
 }
 
@@ -160,7 +54,7 @@ type view struct {
 	sharedPartials         *template.Template
 }
 
-func (v *view) init(debug bool) {
+func (v *view) Load() error {
 	sharedPartials := v.loadSharedPartials()
 	layouts := v.listLayouts()
 	viewDirs := v.listViewDirs()
@@ -185,11 +79,13 @@ func (v *view) init(debug bool) {
 			viewName := strings.Replace(view, "views/", "", 1)
 			v.views[viewName] = tmpl
 
-			if debug {
-				log.Println("loaded template:", viewName)
-			}
+			//if debug {
+			//	log.Println("loaded template:", viewName)
+			//}
 		}
 	}
+
+	return nil
 }
 
 func (v *view) mustParseKey(key string) viewKey {
@@ -318,11 +214,13 @@ func isPartial(path fs.DirEntry) bool {
 	return isTemplate(path) && strings.HasPrefix(path.Name(), "_")
 }
 
-func (v *view) Render(w io.Writer, name string, data interface{}, c echo.Context) error {
+func (v *view) Render(w io.Writer, name string, data interface{}, layouts ...string) error {
 	key := v.mustParseKey(name)
 
 	if v.config.CompileOnRender {
-		v.init(false)
+		if err := v.Load(); err != nil {
+			panic(err)
+		}
 	}
 
 	if key.isShared {
