@@ -9,6 +9,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/csrf"
 	"github.com/gofiber/fiber/v2/middleware/favicon"
+	"github.com/gofiber/fiber/v2/middleware/helmet"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/joho/godotenv"
@@ -66,6 +67,7 @@ func main() {
 		EnableStackTrace: env == "development",
 	}))
 	app.Use(compress.New())
+	app.Use(helmet.New())
 	app.Use(favicon.New())
 	app.Use(csrf.New(csrf.Config{
 		CookieName: "csrf_htmxtodo",
