@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/gofiber/fiber/v2"
 	fiberlog "github.com/gofiber/fiber/v2/log"
+	"github.com/gofiber/fiber/v2/middleware/compress"
 	"github.com/gofiber/fiber/v2/middleware/csrf"
 	"github.com/gofiber/fiber/v2/middleware/favicon"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -64,6 +65,7 @@ func main() {
 	app.Use(recover.New(recover.Config{
 		EnableStackTrace: env == "development",
 	}))
+	app.Use(compress.New())
 	app.Use(favicon.New())
 	app.Use(csrf.New(csrf.Config{
 		CookieName: "csrf_htmxtodo",
