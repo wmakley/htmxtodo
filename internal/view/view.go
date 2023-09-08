@@ -2,6 +2,7 @@ package view
 
 import (
 	"embed"
+	"errors"
 	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"html/template"
@@ -12,11 +13,7 @@ import (
 	"strings"
 )
 
-func New(config *Config) fiber.Views {
-	if config == nil {
-		panic("config is nil")
-	}
-
+func New(config Config) fiber.Views {
 	var internalFS FS
 	if config.CompileOnRender {
 		internalFS = os.DirFS(".").(FS)
@@ -25,7 +22,7 @@ func New(config *Config) fiber.Views {
 	}
 
 	v := view{
-		config:                 config,
+		config:                 &config,
 		fs:                     internalFS,
 		views:                  make(map[string]*template.Template),
 		viewPartialCollections: make(map[string]*template.Template),
@@ -231,7 +228,8 @@ func (v *view) Render(w io.Writer, name string, data interface{}, layouts ...str
 
 	if key.isShared {
 		if err := v.sharedPartials.ExecuteTemplate(w, key.name, data); err != nil {
-			if tplErr, ok := err.(*template.Error); ok && tplErr.ErrorCode == template.ErrNoSuchTemplate {
+			var tplError *template.Error
+			if errors.As(err, &tplError) && tplError.ErrorCode == template.ErrNoSuchTemplate {
 				return fmt.Errorf("template not found: %s", name)
 			} else {
 				panic(err)

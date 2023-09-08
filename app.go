@@ -6,6 +6,7 @@ import (
 	"errors"
 	"github.com/gofiber/fiber/v2"
 	fiberlog "github.com/gofiber/fiber/v2/log"
+	"github.com/gofiber/fiber/v2/middleware/csrf"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/joho/godotenv"
@@ -21,6 +22,8 @@ import (
 
 //go:embed all:views/*
 var viewsFS embed.FS
+
+var csrfToken = "csrfToken"
 
 func main() {
 	err := godotenv.Load()
@@ -47,7 +50,7 @@ func main() {
 	app := fiber.New(fiber.Config{
 		AppName:      "HtmxTodo 0.1.0",
 		ErrorHandler: errorHandler,
-		Views: view.New(&view.Config{
+		Views: view.New(view.Config{
 			CompileOnRender: env == "development",
 			Path:            "views",
 			EmbedFS:         viewsFS,
@@ -60,6 +63,10 @@ func main() {
 	}))
 	app.Use(recover.New(recover.Config{
 		EnableStackTrace: env == "development",
+	}))
+	app.Use(csrf.New(csrf.Config{
+		CookieName: "csrf_htmxtodo",
+		ContextKey: csrfToken,
 	}))
 
 	app.Get("/", func(c *fiber.Ctx) error {
