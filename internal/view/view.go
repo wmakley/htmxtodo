@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/log"
 	"html/template"
 	"io"
 	"io/fs"
-	"log"
 	"os"
 	"strings"
 )
@@ -42,7 +42,6 @@ type Config struct {
 	CompileOnRender bool
 	Path            string
 	EmbedFS         embed.FS
-	DebugLogging    bool
 }
 
 type view struct {
@@ -54,9 +53,7 @@ type view struct {
 }
 
 func (v *view) Load() error {
-	if v.config.DebugLogging {
-		log.Println("view.Load()")
-	}
+	log.Debug("view.Load()")
 
 	sharedPartials := v.loadSharedPartials()
 	layouts := v.listLayouts()
