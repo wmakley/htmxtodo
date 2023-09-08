@@ -5,13 +5,13 @@ import (
 	"embed"
 	"errors"
 	"github.com/gofiber/fiber/v2"
-	globalLog "github.com/gofiber/fiber/v2/log"
+	fiberlog "github.com/gofiber/fiber/v2/log"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"htmxtodo/gen/htmxtodo_dev/public/model"
-	repo2 "htmxtodo/internal/repo"
+	"htmxtodo/internal/repo"
 	"htmxtodo/internal/view"
 	"log"
 	"net/http"
@@ -44,8 +44,6 @@ func main() {
 	}
 	defer db.Close()
 
-	repo := repo2.New(db)
-
 	app := fiber.New(fiber.Config{
 		AppName:      "HtmxTodo 0.1.0",
 		ErrorHandler: errorHandler,
@@ -53,6 +51,7 @@ func main() {
 			CompileOnRender: env == "development",
 			Path:            "views",
 			EmbedFS:         viewsFS,
+			DebugLogging:    env == "development",
 		}),
 	})
 
@@ -67,7 +66,7 @@ func main() {
 		return c.Redirect("/lists", http.StatusFound)
 	})
 
-	lists := ListsHandlers{repo: repo}
+	lists := ListsHandlers{repo: repo.New(db)}
 
 	app.Get("/lists", lists.Index)
 	app.Get("/lists/:id", lists.Show)
@@ -75,8 +74,6 @@ func main() {
 	app.Get("/lists/:id/edit", lists.Edit)
 	app.Patch("/lists/:id", lists.Update)
 	app.Delete("/lists/:id", lists.Delete)
-
-	//e.Logger.SetLevel(log2.DEBUG)
 
 	log.Fatal(app.Listen(host + ":" + port))
 }
@@ -115,7 +112,7 @@ func errorHandler(c *fiber.Ctx, err error) error {
 
 	// Hide internal server error messages from external users
 	if code == fiber.StatusInternalServerError {
-		globalLog.Error(msg)
+		fiberlog.Error(msg)
 		msg = "500 Internal Server Error"
 	}
 
@@ -124,7 +121,7 @@ func errorHandler(c *fiber.Ctx, err error) error {
 }
 
 type ListsHandlers struct {
-	repo repo2.Repository
+	repo repo.Repository
 }
 
 type CardView struct {
