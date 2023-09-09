@@ -133,20 +133,15 @@ type ListsHandlers struct {
 	repo repo.Repository
 }
 
-type CardView struct {
-	EditingName bool
-	List        model.List
-}
-
 func (l *ListsHandlers) Index(c *fiber.Ctx) error {
 	results, err := l.repo.FilterLists(c.Context())
 	if err != nil {
 		return err
 	}
 
-	viewObjects := make([]CardView, len(results))
+	viewObjects := make([]view.Card, len(results))
 	for i, result := range results {
-		viewObjects[i] = CardView{
+		viewObjects[i] = view.Card{
 			EditingName: false,
 			List:        result,
 		}
@@ -191,7 +186,7 @@ func (l *ListsHandlers) Edit(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.Render("lists/_card", CardView{
+	return c.Render("lists/_card", view.Card{
 		EditingName: true,
 		List:        result,
 	})
@@ -219,7 +214,7 @@ func (l *ListsHandlers) Create(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.Render("lists/_card", CardView{
+	return c.Render("lists/_card", view.Card{
 		EditingName: false,
 		List:        result,
 	})
@@ -252,7 +247,7 @@ func (l *ListsHandlers) Update(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.Render("lists/_card", CardView{
+	return c.Render("lists/_card", view.Card{
 		EditingName: false,
 		List:        list,
 	})

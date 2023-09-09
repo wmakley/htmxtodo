@@ -3,29 +3,29 @@
 		<header class="card-header">
 			<p class="card-header-title">
                 {{ if .EditingName }}
-			<form hx-patch="/lists/{{.List.ID}}"
-				  hx-target="#list-{{.List.ID}}"
-				  hx-swap="outerHTML">
-				<input type="text"
-					   value="{{.List.Name}}"
-					   class="input"
-					   placeholder="Name"
-					   aria-label="Name"
-					   name="name">
-				<button class="button is-link is-small ml-2">Save</button>
-			</form>
-            {{ else }}
-                {{if .List.Name}}
-                    {{.List.Name}}
-                {{else}}
-					(Untitled List)
-                {{end}}
-				<button type="button"
-						class="button is-link is-small ml-2"
-						hx-get="/lists/{{.List.ID}}/edit"
-						hx-target="#list-{{.List.ID}}">Edit
-				</button>
-            {{ end }}
+					<form hx-patch="/lists/{{.List.ID}}"
+						  hx-target="#list-{{.List.ID}}"
+						  hx-swap="outerHTML">
+						<input type="text"
+							   value="{{.List.Name}}"
+							   class="input"
+							   placeholder="Name"
+							   aria-label="Name"
+							   name="name">
+						<button class="button is-link is-small ml-2">Save</button>
+					</form>
+				{{ else }}
+					{{if .List.Name}}
+						{{.List.Name}}
+					{{else}}
+						(Untitled List)
+					{{end}}
+					<button type="button"
+							class="button is-link is-small ml-2"
+							hx-get="/lists/{{.List.ID}}/edit"
+							hx-target="#list-{{.List.ID}}">Edit
+					</button>
+				{{ end }}
 			</p>
 		</header>
 		<div class="card-content">
