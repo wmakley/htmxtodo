@@ -113,7 +113,7 @@ func errorHandler(c *fiber.Ctx, err error) error {
 
 	// Render a template for 404 errors
 	if code == fiber.StatusNotFound {
-		return c.Render("errors/404", fiber.Map{
+		return c.Status(code).Render("errors/404", fiber.Map{
 			"Title":      "Error 404",
 			"StatusCode": code,
 		})
