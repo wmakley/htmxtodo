@@ -113,7 +113,7 @@ func errorHandler(c *fiber.Ctx, err error) error {
 
 	// Render a template for 404 errors
 	if code == fiber.StatusNotFound {
-		return c.Render("errors/404.html", fiber.Map{
+		return c.Render("errors/404", fiber.Map{
 			"Title":      "Error 404",
 			"StatusCode": code,
 		})
@@ -155,7 +155,7 @@ func (l *ListsHandlers) Index(c *fiber.Ctx) error {
 		}
 	}
 
-	return c.Render("lists/index.html", fiber.Map{
+	return c.Render("lists/index", fiber.Map{
 		"Title":   "Lists",
 		"Lists":   viewObjects,
 		"NewList": model.List{},
@@ -175,7 +175,7 @@ func (l *ListsHandlers) Show(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.Render("lists/show.html", fiber.Map{
+	return c.Render("lists/show", fiber.Map{
 		"Title": "List",
 		"List":  result,
 	})
@@ -194,7 +194,7 @@ func (l *ListsHandlers) Edit(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.Render("lists/_card.html", CardView{
+	return c.Render("lists/_card", CardView{
 		EditingName: true,
 		List:        result,
 	})
@@ -222,7 +222,7 @@ func (l *ListsHandlers) Create(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.Render("lists/_card.html", CardView{
+	return c.Render("lists/_card", CardView{
 		EditingName: false,
 		List:        result,
 	})
@@ -255,7 +255,7 @@ func (l *ListsHandlers) Update(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.Render("lists/_card.html", CardView{
+	return c.Render("lists/_card", CardView{
 		EditingName: false,
 		List:        list,
 	})

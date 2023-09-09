@@ -2,8 +2,8 @@
 	<h1 class="title">Lists</h1>
 	<div id="lists">
         {{ range .Lists }}
-            {{ template "_card.html" . }}
+            {{ template "_card.tmpl" . }}
         {{ end }}
 	</div>
-    {{template "_form.html" .NewList}}
+    {{template "_form.tmpl" .NewList}}
 {{ end }}

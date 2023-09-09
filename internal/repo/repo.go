@@ -16,6 +16,7 @@ type Repository interface {
 	DeleteListById(ctx context.Context, id int64) error
 }
 
+// DBTX is an interface that matches the standard library sql.DB and sql.Tx interfaces.
 type DBTX interface {
 	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
 	PrepareContext(context.Context, string) (*sql.Stmt, error)
