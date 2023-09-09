@@ -14,11 +14,11 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
--- Name: items; Type: TABLE; Schema: public; Owner: -
+-- Name: item; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.items (
-    id integer NOT NULL,
+CREATE TABLE public.item (
+    id bigint NOT NULL,
     list_id bigint NOT NULL,
     "position" integer NOT NULL,
     name character varying(255) NOT NULL,
@@ -28,11 +28,10 @@ CREATE TABLE public.items (
 
 
 --
--- Name: items_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: item_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE SEQUENCE public.items_id_seq
-    AS integer
+CREATE SEQUENCE public.item_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -41,18 +40,18 @@ CREATE SEQUENCE public.items_id_seq
 
 
 --
--- Name: items_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: item_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
-ALTER SEQUENCE public.items_id_seq OWNED BY public.items.id;
+ALTER SEQUENCE public.item_id_seq OWNED BY public.item.id;
 
 
 --
--- Name: lists; Type: TABLE; Schema: public; Owner: -
+-- Name: list; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.lists (
-    id integer NOT NULL,
+CREATE TABLE public.list (
+    id bigint NOT NULL,
     name character varying(255) NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
@@ -60,11 +59,10 @@ CREATE TABLE public.lists (
 
 
 --
--- Name: lists_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+-- Name: list_id_seq; Type: SEQUENCE; Schema: public; Owner: -
 --
 
-CREATE SEQUENCE public.lists_id_seq
-    AS integer
+CREATE SEQUENCE public.list_id_seq
     START WITH 1
     INCREMENT BY 1
     NO MINVALUE
@@ -73,10 +71,10 @@ CREATE SEQUENCE public.lists_id_seq
 
 
 --
--- Name: lists_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+-- Name: list_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
 --
 
-ALTER SEQUENCE public.lists_id_seq OWNED BY public.lists.id;
+ALTER SEQUENCE public.list_id_seq OWNED BY public.list.id;
 
 
 --
@@ -89,41 +87,41 @@ CREATE TABLE public.schema_migrations (
 
 
 --
--- Name: items id; Type: DEFAULT; Schema: public; Owner: -
+-- Name: item id; Type: DEFAULT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.items ALTER COLUMN id SET DEFAULT nextval('public.items_id_seq'::regclass);
-
-
---
--- Name: lists id; Type: DEFAULT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.lists ALTER COLUMN id SET DEFAULT nextval('public.lists_id_seq'::regclass);
+ALTER TABLE ONLY public.item ALTER COLUMN id SET DEFAULT nextval('public.item_id_seq'::regclass);
 
 
 --
--- Name: items items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: list id; Type: DEFAULT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.items
-    ADD CONSTRAINT items_pkey PRIMARY KEY (id);
-
-
---
--- Name: lists lists_name_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.lists
-    ADD CONSTRAINT lists_name_key UNIQUE (name);
+ALTER TABLE ONLY public.list ALTER COLUMN id SET DEFAULT nextval('public.list_id_seq'::regclass);
 
 
 --
--- Name: lists lists_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+-- Name: item item_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.lists
-    ADD CONSTRAINT lists_pkey PRIMARY KEY (id);
+ALTER TABLE ONLY public.item
+    ADD CONSTRAINT item_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: list list_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.list
+    ADD CONSTRAINT list_name_key UNIQUE (name);
+
+
+--
+-- Name: list list_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.list
+    ADD CONSTRAINT list_pkey PRIMARY KEY (id);
 
 
 --
@@ -138,15 +136,15 @@ ALTER TABLE ONLY public.schema_migrations
 -- Name: items_list_id_position_idx; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX items_list_id_position_idx ON public.items USING btree (list_id, "position");
+CREATE INDEX items_list_id_position_idx ON public.item USING btree (list_id, "position");
 
 
 --
--- Name: items items_list_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: item item_list_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.items
-    ADD CONSTRAINT items_list_id_fkey FOREIGN KEY (list_id) REFERENCES public.lists(id);
+ALTER TABLE ONLY public.item
+    ADD CONSTRAINT item_list_id_fkey FOREIGN KEY (list_id) REFERENCES public.list(id);
 
 
 --

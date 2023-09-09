@@ -1,4 +1,4 @@
-package main
+package app
 
 import (
 	"database/sql"
@@ -12,59 +12,56 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/helmet"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
-	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 	"htmxtodo/gen/htmxtodo_dev/public/model"
 	"htmxtodo/internal/repo"
 	"htmxtodo/internal/view"
-	"log"
 	"net/http"
 	"os"
 	"strings"
 )
 
-//go:embed all:views/*
-var viewsFS embed.FS
+// Config is the global config for the app router. Host and Port are needed for absolute URL generation.
+type Config struct {
+	Env     string
+	Host    string
+	Port    string
+	Repo    repo.Repository
+	ViewsFS embed.FS
+}
 
-var csrfToken = "csrfToken"
+func NewConfigFromEnvironment(viewsFS embed.FS, repo repo.Repository) Config {
+	return Config{
+		Env:     os.Getenv("ENV"),
+		Host:    os.Getenv("HOST"),
+		Port:    os.Getenv("PORT"),
+		Repo:    repo,
+		ViewsFS: viewsFS,
+	}
+}
 
-func main() {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatalf("Error loading .env file: %v", err)
-	}
+const Development = "development"
+const Production = "production"
+const csrfToken = "csrfToken"
 
-	env := os.Getenv("ENVIRONMENT")
-	host := os.Getenv("HOST")
-	if host == "" {
-		host = "0.0.0.0"
-	}
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
-	db, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
-	if err != nil {
-		log.Fatalf("failed to open db: %v", err)
-	}
-	defer db.Close()
+func New(config *Config) *fiber.App {
+	fiberlog.Debug("Starting app with config:", config)
 
 	app := fiber.New(fiber.Config{
 		AppName:      "HtmxTodo 0.1.0",
 		ErrorHandler: errorHandler,
 		Views: view.New(view.Config{
-			CompileOnRender: env == "development",
+			CompileOnRender: config.Env == Development,
 			Path:            "views",
-			EmbedFS:         viewsFS,
+			EmbedFS:         config.ViewsFS,
 		}),
 	})
 
 	app.Use(logger.New(logger.Config{
-		DisableColors: env != "development",
+		DisableColors: config.Env == Production,
 	}))
 	app.Use(recover.New(recover.Config{
-		EnableStackTrace: env == "development",
+		EnableStackTrace: config.Env == Development,
 	}))
 	app.Use(compress.New())
 	app.Use(helmet.New())
@@ -78,7 +75,7 @@ func main() {
 		return c.Redirect("/lists", http.StatusFound)
 	})
 
-	lists := ListsHandlers{repo: repo.New(db)}
+	lists := ListsHandlers{repo: config.Repo}
 
 	app.Get("/lists", lists.Index)
 	app.Get("/lists/:id", lists.Show)
@@ -87,12 +84,12 @@ func main() {
 	app.Patch("/lists/:id", lists.Update)
 	app.Delete("/lists/:id", lists.Delete)
 
-	log.Fatal(app.Listen(host + ":" + port))
+	return app
 }
 
 func errorHandler(c *fiber.Ctx, err error) error {
 	// Status code defaults to 500
-	code := fiber.StatusInternalServerError
+	code := http.StatusInternalServerError
 	msg := err.Error()
 
 	// Retrieve the custom status code if it's a *fiber.Error
@@ -103,18 +100,18 @@ func errorHandler(c *fiber.Ctx, err error) error {
 
 	// Special handling for other error types
 	if errors.Is(err, sql.ErrNoRows) {
-		code = fiber.StatusNotFound
+		code = http.StatusNotFound
 	}
 
 	// Parameter decoding errors are errors bad route, meaning not found (but may also be bugs)
 	if strings.HasPrefix(msg, "failed to decode:") {
-		code = fiber.StatusNotFound
+		code = http.StatusNotFound
 	}
 
 	// Render a template for 404 errors
-	if code == fiber.StatusNotFound {
+	if code == http.StatusNotFound {
 		return c.Status(code).Render("errors/404", fiber.Map{
-			"Title":      "Error 404",
+			"Title":      "404 - Not Found",
 			"StatusCode": code,
 		})
 	}
@@ -123,7 +120,7 @@ func errorHandler(c *fiber.Ctx, err error) error {
 	c.Set(fiber.HeaderContentType, fiber.MIMETextPlainCharsetUTF8)
 
 	// Hide internal server error messages from external users
-	if code == fiber.StatusInternalServerError {
+	if code == http.StatusInternalServerError {
 		fiberlog.Error(msg)
 		msg = "500 Internal Server Error"
 	}
