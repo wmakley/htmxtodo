@@ -1,6 +1,6 @@
 {{ define "content" }}
 	<h1 class="title">Lists</h1>
-	<div id="lists">
+	<div id="lists" class="tile is-ancestor">
         {{ range .Lists }}
             {{ template "_card.tmpl" . }}
         {{ end }}
