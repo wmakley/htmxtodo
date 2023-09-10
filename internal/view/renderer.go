@@ -1,9 +1,9 @@
 package view
 
 import (
-	"embed"
 	"errors"
 	"fmt"
+	"github.com/Masterminds/sprig/v3"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/log"
 	"html/template"
@@ -13,12 +13,28 @@ import (
 	"strings"
 )
 
+type Config struct {
+	// If true, templates will be compiled on every request. Good for development.
+	CompileOnRender bool
+	Path            string
+	FS              FS
+}
+
+// FS has all file system interfaces needed by view.
+type FS interface {
+	fs.FS
+	fs.ReadDirFS
+}
+
+const Dir = "views/"
+const Suffix = ".tmpl"
+
 func New(config Config) fiber.Views {
 	var internalFS FS
-	if config.CompileOnRender {
+	if config.FS == nil || config.CompileOnRender {
 		internalFS = os.DirFS(".").(FS)
 	} else {
-		internalFS = config.EmbedFS
+		internalFS = config.FS
 	}
 
 	v := view{
@@ -30,22 +46,6 @@ func New(config Config) fiber.Views {
 	//v.init(true)
 	return &v
 }
-
-// FS has all file system interfaces needed by view.
-type FS interface {
-	fs.FS
-	fs.ReadDirFS
-}
-
-type Config struct {
-	// If true, templates will be compiled on every request. Good for development.
-	CompileOnRender bool
-	Path            string
-	EmbedFS         embed.FS
-}
-
-const Dir = "views/"
-const Suffix = ".tmpl"
 
 type view struct {
 	config                 *Config
@@ -62,22 +62,26 @@ func (v *view) Load() error {
 	layouts := v.listLayouts()
 	viewDirs := v.listViewDirs()
 
+	mainLayout := Dir + "layouts/main" + Suffix
+
 	for _, viewDir := range viewDirs {
 		views, partials := v.scanViewDir(viewDir)
 
 		if len(partials) > 0 {
 			key := strings.Replace(viewDir, Dir, "", 1)
-			v.viewPartialCollections[key] = template.Must(template.ParseFS(v.fs, partials...))
+			t := template.New(key).Funcs(sprig.FuncMap())
+			v.viewPartialCollections[key] = template.Must(t.ParseFS(v.fs, partials...))
 		}
 
 		for _, view := range views {
 			allTemplates := make([]string, 0, len(sharedPartials)+len(layouts)+len(partials)+1)
-			allTemplates = append(allTemplates, Dir+"layouts/main"+Suffix)
+			allTemplates = append(allTemplates, mainLayout)
 			allTemplates = append(allTemplates, view)
 			allTemplates = append(allTemplates, sharedPartials...)
 			allTemplates = append(allTemplates, partials...)
 
-			tmpl := template.Must(template.ParseFS(v.fs, allTemplates...))
+			tmpl := template.New("main" + Suffix).Funcs(v.FuncMap())
+			tmpl = template.Must(tmpl.ParseFS(v.fs, allTemplates...))
 
 			viewName := strings.Replace(view, Dir, "", 1)
 			v.views[viewName] = tmpl
@@ -168,11 +172,17 @@ func (k viewKey) FullPath() string {
 	return k.viewDir + "/" + k.name
 }
 
+func (v *view) FuncMap() template.FuncMap {
+	return sprig.FuncMap()
+}
+
 // loadSharedPartials loads all partials in the "shared" view directory and returns their paths.
 func (v *view) loadSharedPartials() []string {
 	partials := v.listPartials("shared")
 
-	v.sharedPartials = template.Must(template.ParseFS(v.fs, partials...))
+	t := template.New("shared").Funcs(v.FuncMap())
+
+	v.sharedPartials = template.Must(t.ParseFS(v.fs, partials...))
 	return partials
 }
 

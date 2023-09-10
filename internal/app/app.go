@@ -53,7 +53,7 @@ func New(config *Config) *fiber.App {
 		Views: view.New(view.Config{
 			CompileOnRender: config.Env == Development,
 			Path:            "views",
-			EmbedFS:         config.ViewsFS,
+			FS:              config.ViewsFS,
 		}),
 	})
 
