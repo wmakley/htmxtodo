@@ -10,14 +10,17 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
 type Config struct {
-	// If true, templates will be compiled on every request. Good for development.
+	// CompileOnRender will cause templates will be compiled on every request. Good for development.
 	CompileOnRender bool
-	Path            string
-	FS              FS
+	// FS allows use of embedded file system. If nil, os.DirFS(".") will be used.
+	FS FS
+	// Path to the views directory containing templates (inside FS).
+	Path string
 }
 
 // FS has all file system interfaces needed by view.
@@ -26,8 +29,12 @@ type FS interface {
 	fs.ReadDirFS
 }
 
-const Dir = "views/"
-const Suffix = ".tmpl"
+const (
+	Suffix        = ".tmpl"
+	Shared        = "shared"
+	Layouts       = "layouts"
+	DefaultLayout = "main" + Suffix
+)
 
 func New(config Config) fiber.Views {
 	var internalFS FS
@@ -62,13 +69,16 @@ func (v *view) Load() error {
 	layouts := v.listLayouts()
 	viewDirs := v.listViewDirs()
 
-	mainLayout := Dir + "layouts/main" + Suffix
+	mainLayout := filepath.Join(v.config.Path, Layouts, DefaultLayout)
+
+	// File system prefix to strip off to generate view names.
+	stripPrefix := v.config.Path + string(os.PathSeparator)
 
 	for _, viewDir := range viewDirs {
 		views, partials := v.scanViewDir(viewDir)
 
 		if len(partials) > 0 {
-			key := strings.Replace(viewDir, Dir, "", 1)
+			key := strings.Replace(viewDir, v.config.Path, "", 1)
 			t := template.New(key).Funcs(sprig.FuncMap())
 			v.viewPartialCollections[key] = template.Must(t.ParseFS(v.fs, partials...))
 		}
@@ -80,10 +90,10 @@ func (v *view) Load() error {
 			allTemplates = append(allTemplates, sharedPartials...)
 			allTemplates = append(allTemplates, partials...)
 
-			tmpl := template.New("main" + Suffix).Funcs(v.FuncMap())
+			tmpl := template.New(DefaultLayout).Funcs(v.FuncMap())
 			tmpl = template.Must(tmpl.ParseFS(v.fs, allTemplates...))
 
-			viewName := strings.Replace(view, Dir, "", 1)
+			viewName := strings.Replace(view, stripPrefix, "", 1)
 			v.views[viewName] = tmpl
 
 			log.Debug("view.Load(): loaded template:", viewName)
@@ -157,7 +167,7 @@ func parseTemplateName(name string) (viewKey, error) {
 		viewDir:   parts[0],
 		name:      nameWithExtension,
 		isPartial: strings.HasPrefix(parts[1], "_"),
-		isShared:  parts[0] == "shared",
+		isShared:  parts[0] == Shared,
 	}, nil
 }
 
@@ -169,7 +179,7 @@ type viewKey struct {
 }
 
 func (k viewKey) FullPath() string {
-	return k.viewDir + "/" + k.name
+	return filepath.Join(k.viewDir, k.name)
 }
 
 func (v *view) FuncMap() template.FuncMap {
@@ -178,16 +188,17 @@ func (v *view) FuncMap() template.FuncMap {
 
 // loadSharedPartials loads all partials in the "shared" view directory and returns their paths.
 func (v *view) loadSharedPartials() []string {
-	partials := v.listPartials("shared")
+	partials := v.listPartials(Shared)
 
-	t := template.New("shared").Funcs(v.FuncMap())
+	t := template.New(partials[0]).Funcs(v.FuncMap())
 
 	v.sharedPartials = template.Must(t.ParseFS(v.fs, partials...))
 	return partials
 }
 
 func (v *view) listLayouts() []string {
-	entries, err := v.fs.ReadDir("views/layouts")
+	layoutsPath := filepath.Join(v.config.Path, Layouts)
+	entries, err := v.fs.ReadDir(layoutsPath)
 	if err != nil {
 		panic(err)
 	}
@@ -195,7 +206,7 @@ func (v *view) listLayouts() []string {
 	layouts := make([]string, 0, len(entries))
 	for _, f := range entries {
 		if isTemplate(f) {
-			layouts = append(layouts, "views/layouts/"+f.Name())
+			layouts = append(layouts, filepath.Join(layoutsPath, f.Name()))
 		}
 	}
 	return layouts
@@ -203,7 +214,8 @@ func (v *view) listLayouts() []string {
 
 // scanViewDir returns a list of all views and partials in the given view directory.
 func (v *view) scanViewDir(viewDir string) (views []string, partials []string) {
-	entries, err := v.fs.ReadDir("views/" + viewDir)
+	basePath := filepath.Join(v.config.Path, viewDir)
+	entries, err := v.fs.ReadDir(basePath)
 	if err != nil {
 		panic(err)
 	}
@@ -217,9 +229,9 @@ func (v *view) scanViewDir(viewDir string) (views []string, partials []string) {
 		}
 
 		if isPartial(f) {
-			partials = append(partials, "views/"+viewDir+"/"+f.Name())
+			partials = append(partials, filepath.Join(basePath, f.Name()))
 		} else {
-			views = append(views, "views/"+viewDir+"/"+f.Name())
+			views = append(views, filepath.Join(basePath, f.Name()))
 		}
 	}
 	return views, partials
@@ -227,14 +239,14 @@ func (v *view) scanViewDir(viewDir string) (views []string, partials []string) {
 
 // listViewDirs returns a list of all view directories other than "shared" or "layouts"
 func (v *view) listViewDirs() []string {
-	entries, err := v.fs.ReadDir("views")
+	entries, err := v.fs.ReadDir(v.config.Path)
 	if err != nil {
 		panic(err)
 	}
 
 	viewDirs := make([]string, 0, len(entries))
 	for _, f := range entries {
-		if f.IsDir() && f.Name() != "shared" && f.Name() != "layouts" {
+		if f.IsDir() && f.Name() != Shared && f.Name() != Layouts {
 			viewDirs = append(viewDirs, f.Name())
 		}
 	}
@@ -243,7 +255,8 @@ func (v *view) listViewDirs() []string {
 
 // listPartials returns a list of all partials in the given view directory.
 func (v *view) listPartials(viewDir string) []string {
-	entries, err := v.fs.ReadDir("views/" + viewDir)
+	basePath := filepath.Join(v.config.Path, viewDir)
+	entries, err := v.fs.ReadDir(basePath)
 	if err != nil {
 		panic(err)
 	}
@@ -251,7 +264,7 @@ func (v *view) listPartials(viewDir string) []string {
 	partials := make([]string, 0, len(entries))
 	for _, f := range entries {
 		if isPartial(f) {
-			partials = append(partials, "views/"+viewDir+"/"+f.Name())
+			partials = append(partials, filepath.Join(basePath, f.Name()))
 		}
 	}
 	return partials
