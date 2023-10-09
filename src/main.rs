@@ -2,25 +2,26 @@ use std::env;
 use std::net::{IpAddr, SocketAddr};
 
 use anyhow::{anyhow, Context};
+use askama::Template;
 use axum::extract::Path;
 use axum::http::StatusCode;
-use axum::response::{IntoResponse, Redirect, Response};
+use axum::response::{IntoResponse, Redirect};
 use axum::Form;
 use axum::{
-    error_handling::HandleErrorLayer,
+    // error_handling::HandleErrorLayer,
     extract::{FromRef, State},
     routing::{delete, get},
     Router,
 };
-use axum_template::{engine::Engine, RenderHtml};
 use chrono;
 use dotenvy::dotenv;
 use handlebars::Handlebars;
 use serde::Deserialize;
-use serde_json::{json, Value};
+// use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
-use std::time::Duration;
-use tower::ServiceBuilder;
+// use std::time::Duration;
+// use tower::ServiceBuilder;
+// use tower::util::ServiceExt;
 use tower_http::trace::TraceLayer;
 use tracing::debug;
 
@@ -29,12 +30,12 @@ mod error;
 
 use error::AppError;
 
-type TemplateEngine = Engine<Handlebars<'static>>;
-type Page = RenderHtml<String, TemplateEngine, Value>;
+// type TemplateEngine = Engine<Handlebars<'static>>;
+// type Page = RenderHtml<String, TemplateEngine, Value>;
 
 #[derive(Clone)]
 struct AppState {
-    template_engine: TemplateEngine,
+    // template_engine: TemplateEngine,
     repo: db::Repo,
 }
 
@@ -44,11 +45,11 @@ impl FromRef<AppState> for db::Repo {
     }
 }
 
-impl FromRef<AppState> for TemplateEngine {
-    fn from_ref(app_state: &AppState) -> TemplateEngine {
-        app_state.template_engine.clone()
-    }
-}
+// impl FromRef<AppState> for TemplateEngine {
+//     fn from_ref(app_state: &AppState) -> TemplateEngine {
+//         app_state.template_engine.clone()
+//     }
+// }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -97,7 +98,7 @@ async fn main() -> anyhow::Result<()> {
         .context("could not register lists/_card template")?;
 
     let shared_state = AppState {
-        template_engine: Engine::from(hbs),
+        // template_engine: Engine::from(hbs),
         repo: db::Repo::new(pool),
     };
 
@@ -125,21 +126,47 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn handle_timeout_error(err: axum::BoxError) -> (StatusCode, String) {
-    if err.is::<tower::timeout::error::Elapsed>() {
-        (
-            StatusCode::REQUEST_TIMEOUT,
-            "Request took too long".to_string(),
-        )
-    } else {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("Unhandled internal error: {}", err),
-        )
-    }
+// async fn handle_timeout_error(err: axum::BoxError) -> (StatusCode, String) {
+//     if err.is::<tower::timeout::error::Elapsed>() {
+//         (
+//             StatusCode::REQUEST_TIMEOUT,
+//             "Request took too long".to_string(),
+//         )
+//     } else {
+//         (
+//             StatusCode::INTERNAL_SERVER_ERROR,
+//             format!("Unhandled internal error: {}", err),
+//         )
+//     }
+// }
+
+#[derive(Template)]
+#[template(path = "base.html")]
+struct MainTemplate {}
+
+#[derive(Template)]
+#[template(path = "lists/index.html")]
+struct ListsIndexTemplate {
+    lists: Vec<db::List>,
+    new_list: db::List,
+    editing_name: bool,
 }
 
-async fn lists_index(State(state): State<AppState>) -> Result<Page, AppError> {
+#[derive(Template)]
+#[template(path = "lists/_card.html")]
+struct ListCardTemplate {
+    list: db::List,
+    editing_name: bool,
+}
+
+#[derive(Template)]
+#[template(path = "lists/_form.html")]
+struct ListCreateFormTemplate {
+    new_list: db::List,
+    // errors: Vec<String>,
+}
+
+async fn lists_index(State(state): State<AppState>) -> Result<ListsIndexTemplate, AppError> {
     let lists = state.repo.filter_lists().await?;
 
     let new_list = db::List {
@@ -149,14 +176,11 @@ async fn lists_index(State(state): State<AppState>) -> Result<Page, AppError> {
         updated_at: chrono::Utc::now(),
     };
 
-    Ok(RenderHtml(
-        "lists/index".to_string(),
-        state.template_engine,
-        json!({
-            "lists": lists,
-            "new_list": new_list,
-        }),
-    ))
+    Ok(ListsIndexTemplate {
+        lists,
+        new_list,
+        editing_name: false,
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -167,42 +191,36 @@ pub struct CreateListForm {
 async fn create_list(
     State(state): State<AppState>,
     Form(form): Form<CreateListForm>,
-) -> Result<(StatusCode, Page), AppError> {
+) -> Result<impl IntoResponse, AppError> {
     debug!("create_list form: {:?}", form);
 
     let name = form.name.trim();
     if name.is_empty() {
         return Ok((
             StatusCode::BAD_REQUEST,
-            RenderHtml(
-                "lists/_form".to_string(),
-                state.template_engine,
-                json!({
-                    "list": db::List {
-                        id: 0,
-                        name: name.to_string(),
-                        created_at: chrono::Utc::now(),
-                        updated_at: chrono::Utc::now(),
-                    },
-                    "errors": vec!["name cannot be empty".to_string()],
-                }),
-            ),
-        ));
+            ListCreateFormTemplate {
+                new_list: db::List {
+                    id: 0,
+                    name: name.to_string(),
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                },
+                // errors: vec!["name cannot be empty".to_string()],
+            },
+        )
+            .into_response());
     }
 
     let list = state.repo.create_list(name).await?;
 
     Ok((
         StatusCode::OK,
-        RenderHtml(
-            "lists/_card".to_string(),
-            state.template_engine,
-            json!({
-                "list": list,
-                "editing_name": false,
-            }),
-        ),
-    ))
+        ListCardTemplate {
+            list: list,
+            editing_name: false,
+        },
+    )
+        .into_response())
 }
 
 async fn delete_list(
@@ -216,19 +234,18 @@ async fn delete_list(
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn edit_list(State(state): State<AppState>, Path(id): Path<i64>) -> Result<Page, AppError> {
+async fn edit_list(
+    State(state): State<AppState>,
+    Path(id): Path<i64>,
+) -> Result<ListCardTemplate, AppError> {
     debug!("edit_list id: {:?}", id);
 
     let list = state.repo.get_list(id).await?;
 
-    Ok(RenderHtml(
-        "lists/_card".to_string(),
-        state.template_engine,
-        json!({
-            "list": list,
-            "editing_name": true,
-        }),
-    ))
+    Ok(ListCardTemplate {
+        list,
+        editing_name: true,
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -240,7 +257,7 @@ async fn update_list(
     State(state): State<AppState>,
     Path(id): Path<i64>,
     Form(form): Form<UpdateListForm>,
-) -> Result<Response, AppError> {
+) -> Result<impl IntoResponse, AppError> {
     debug!("update_list id: {:?}", id);
 
     let name = form.name.trim();
@@ -251,13 +268,12 @@ async fn update_list(
 
     let list = state.repo.update_list(id, name).await?;
 
-    Ok(RenderHtml(
-        "lists/_card".to_string(),
-        state.template_engine,
-        json!({
-            "list": list,
-            "editing_name": false,
-        }),
+    Ok((
+        StatusCode::OK,
+        ListCardTemplate {
+            list,
+            editing_name: false,
+        },
     )
-    .into_response())
+        .into_response())
 }

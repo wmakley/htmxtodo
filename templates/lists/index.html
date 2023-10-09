@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Lists{% endblock %}
+{% block content %}
+<h1 class="title">Lists</h1>
+<div id="lists">
+	{% for list in lists %}
+	{% include "lists/_card.html" %}
+	{% endfor %}
+</div>
+{% include "lists/_form.html" %}
+{% endblock %}

@@ -4,33 +4,26 @@ use sqlx;
 // use axum_template::{engine::Engine, RenderHtml};
 use tracing::error;
 
+// Application error type has specific variants for things we want to handle
+// specially, and a catch-all variant for everything else that will become
+// "500 Internal Server Error".
+//
+// Errors are logged when converted to a response (couldn't find another way).
 #[derive(Debug)]
 pub enum AppError {
-    RecordNotFound(String, i64),
-    NotFound,
-    Sqlx(sqlx::Error),
+    RecordNotFound,
     Other(anyhow::Error),
 }
 
-// Tell axum how to convert `AppError` into a response.
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
+        // TODO: is this the best way to log every error? can't find another place to put it
+        // Axum seems unbelievably eager to just eat errors!
         error!("{:?}", self);
 
         match self {
-            AppError::RecordNotFound(record, id) => (
-                StatusCode::NOT_FOUND,
-                format!("404 Not Found: {} with id {} not found\n", record, id),
-            )
-                .into_response(),
-            AppError::NotFound => (StatusCode::NOT_FOUND, "404 Not Found\n").into_response(),
+            AppError::RecordNotFound => (StatusCode::NOT_FOUND, "404 Not Found\n").into_response(),
 
-            // TODO: details should be logged, but not returned to the client
-            AppError::Sqlx(err) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("500 Internal Server Error: {}\n", err),
-            )
-                .into_response(),
             AppError::Other(err) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("500 Internal Server Error: {}\n", err),
@@ -43,8 +36,8 @@ impl IntoResponse for AppError {
 impl From<sqlx::Error> for AppError {
     fn from(err: sqlx::Error) -> Self {
         match err {
-            sqlx::Error::RowNotFound => Self::NotFound,
-            _ => Self::Sqlx(err),
+            sqlx::Error::RowNotFound => Self::RecordNotFound,
+            _ => Self::Other(err.into()),
         }
     }
 }

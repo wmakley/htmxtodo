@@ -1,32 +1,22 @@
 <div class="card mb-3" id="list-{{list.id}}">
 	<header class="card-header">
-	<p class="card-header-title">
-		{{#if editing_name}}
-			<form hx-patch="/lists/{{list.id}}"
-				  hx-target="#list-{{list.id}}"
-				  hx-swap="outerHTML">
-				<input type="text"
-					   value="{{list.name}}"
-					   class="input"
-					   placeholder="Name"
-					   aria-label="Name"
-					   name="name"/>
-				<button class="button is-link">Save</button>
-			</form>
-		{{else}}
-			{{#if list.name}}
-				{{list.name}}
+		<p class="card-header-title">
+			{{#if editing_name}}
+				<form hx-patch="/lists/{{list.id}}" hx-target="#list-{{list.id}}" hx-swap="outerHTML">
+					<input type="text" value="{{list.name}}" class="input" placeholder="Name" aria-label="Name" name="name" />
+					<button class="button is-link">Save</button>
+				</form>
 			{{else}}
-				(Untitled List)
-			{{/if}}
-			<button type="button"
-					class="button is-link"
-					hx-get="/lists/{{list.id}}/edit"
-					hx-target="#list-{{list.id}}"
+				{{#if list.name}}
+					{{list.name}}
+				{{else}}
+					(Untitled List)
+				{{/if}}
+				<button type="button" class="button is-link" hx-get="/lists/{{list.id}}/edit" hx-target="#list-{{list.id}}"
 					hx-swap="outerHTML">Edit
-			</button>
-		{{/if}}
-	</p>
+				</button>
+			{{/if}}
+		</p>
 	</header>
 	<div class="card-content">
 		<div class="content">
@@ -40,11 +30,7 @@
 	<footer class="card-footer">
 		<a href="#" class="card-footer-item">Save</a>
 		<a href="#" class="card-footer-item">Edit</a>
-		<a href="/lists/{{list.id}}"
-		   hx-confirm="Are you sure you want to delete this list?"
-		   hx-delete="/lists/{{list.id}}"
-		   hx-target="#list-{{list.id}}"
-		   hx-swap="delete"
-		   class="card-footer-item">Delete</a>
+		<a href="/lists/{{list.id}}" hx-confirm="Are you sure you want to delete this list?" hx-delete="/lists/{{list.id}}"
+			hx-target="#list-{{list.id}}" hx-swap="delete" class="card-footer-item">Delete</a>
 	</footer>
 </div>
