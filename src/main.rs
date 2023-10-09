@@ -8,20 +8,14 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Redirect};
 use axum::Form;
 use axum::{
-    // error_handling::HandleErrorLayer,
     extract::{FromRef, State},
     routing::{delete, get},
     Router,
 };
 use chrono;
 use dotenvy::dotenv;
-use handlebars::Handlebars;
 use serde::Deserialize;
-// use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
-// use std::time::Duration;
-// use tower::ServiceBuilder;
-// use tower::util::ServiceExt;
 use tower_http::trace::TraceLayer;
 use tracing::debug;
 
@@ -30,12 +24,8 @@ mod error;
 
 use error::AppError;
 
-// type TemplateEngine = Engine<Handlebars<'static>>;
-// type Page = RenderHtml<String, TemplateEngine, Value>;
-
 #[derive(Clone)]
 struct AppState {
-    // template_engine: TemplateEngine,
     repo: db::Repo,
 }
 
@@ -44,12 +34,6 @@ impl FromRef<AppState> for db::Repo {
         app_state.repo.clone()
     }
 }
-
-// impl FromRef<AppState> for TemplateEngine {
-//     fn from_ref(app_state: &AppState) -> TemplateEngine {
-//         app_state.template_engine.clone()
-//     }
-// }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -85,20 +69,7 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("could not connect to database_url")?;
 
-    let mut hbs = Handlebars::new();
-    hbs.register_template_file("layouts/main", "./views/layouts/main.hbs")
-        .context("could not register layouts/main template")?;
-    // hbs.register_template_file("shared/_head", "./views/shared/_head.hbs")
-    //     .context("could not register shared/head template")?;
-    hbs.register_template_file("lists/index", "./views/lists/index.hbs")
-        .context("could not register lists/index template")?;
-    hbs.register_template_file("lists/_form", "./views/lists/_form.hbs")
-        .context("could not register lists/_form template")?;
-    hbs.register_template_file("lists/_card", "./views/lists/_card.hbs")
-        .context("could not register lists/_card template")?;
-
     let shared_state = AppState {
-        // template_engine: Engine::from(hbs),
         repo: db::Repo::new(pool),
     };
 
