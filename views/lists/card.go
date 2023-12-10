@@ -21,7 +21,3 @@ func (c CardProps) EditListUrl() string {
 func (c CardProps) Id() string {
 	return fmt.Sprintf("card-%d", c.List.ID)
 }
-
-func (c CardProps) Selector() string {
-	return fmt.Sprintf("#card-%d", c.List.ID)
-}
