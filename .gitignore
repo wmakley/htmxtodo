@@ -8,5 +8,11 @@
 # cruft
 rustc-*
 
+# Go build output
+/build/*
+
 # Added by cargo
 /target
+
+# Only commit original templ for now
+*_templ.go

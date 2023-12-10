@@ -1,5 +1,6 @@
-app: templ
-	go build main.go -o app
+build/app: templ
+	mkdir -p build
+	go build -o $@ .
 
 serve: templ
 	go run .
@@ -7,4 +8,7 @@ serve: templ
 templ:
 	templ generate
 
-.PHONY: app templ serve
+clean:
+	rm build/app
+
+.PHONY: templ serve clean
