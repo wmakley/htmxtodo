@@ -3,11 +3,11 @@ package lists
 import (
 	"htmxtodo/gen/htmxtodo_dev/public/model"
 	"htmxtodo/internal/view"
-	"htmxtodo/views"
+	"htmxtodo/views/layouts"
 )
 
 templ Index(cards []view.Card, newList model.List) {
-	@views.Layout(index(cards, newList), "Lists")
+	@layouts.Main(index(cards, newList), "Lists")
 }
 
 templ index(cards []view.Card, newList model.List) {

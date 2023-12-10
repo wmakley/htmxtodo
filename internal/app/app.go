@@ -2,7 +2,6 @@ package app
 
 import (
 	"database/sql"
-	"embed"
 	"errors"
 	"github.com/gofiber/fiber/v2"
 	fiberlog "github.com/gofiber/fiber/v2/log"
@@ -12,7 +11,6 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/helmet"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
-	engine "github.com/gofiber/template/html/v2"
 	_ "github.com/lib/pq"
 	"htmxtodo/gen/htmxtodo_dev/public/model"
 	"htmxtodo/internal/repo"
@@ -25,20 +23,18 @@ import (
 
 // Config is the global config for the app router. Host and Port are needed for absolute URL generation.
 type Config struct {
-	Env     string
-	Host    string
-	Port    string
-	Repo    repo.Repository
-	ViewsFS embed.FS
+	Env  string
+	Host string
+	Port string
+	Repo repo.Repository
 }
 
-func NewConfigFromEnvironment(viewsFS embed.FS, repo repo.Repository) Config {
+func NewConfigFromEnvironment(repo repo.Repository) Config {
 	return Config{
-		Env:     os.Getenv("ENV"),
-		Host:    os.Getenv("HOST"),
-		Port:    os.Getenv("PORT"),
-		Repo:    repo,
-		ViewsFS: viewsFS,
+		Env:  os.Getenv("ENV"),
+		Host: os.Getenv("HOST"),
+		Port: os.Getenv("PORT"),
+		Repo: repo,
 	}
 }
 
@@ -52,7 +48,6 @@ func New(config *Config) *fiber.App {
 	app := fiber.New(fiber.Config{
 		AppName:      "HtmxTodo 0.1.0",
 		ErrorHandler: errorHandler,
-		Views:        engine.New("views", ".tmpl"),
 	})
 
 	app.Use(logger.New(logger.Config{
@@ -106,7 +101,7 @@ func errorHandler(c *fiber.Ctx, err error) error {
 		code = http.StatusNotFound
 	}
 
-	// Render a template for 404 errors
+	// RenderComponent a template for 404 errors
 	if code == http.StatusNotFound {
 		return c.Status(code).Render("errors/404", fiber.Map{
 			"Title":      "404 - Not Found",
@@ -145,8 +140,7 @@ func (l *ListsHandlers) Index(c *fiber.Ctx) error {
 		}
 	}
 
-	c.Set("Content-Type", "text/html; charset=utf-8")
-	return listviews.Index(viewObjects, model.List{}).Render(c.Context(), c)
+	return view.RenderComponent(c, 200, listviews.Index(viewObjects, model.List{}))
 }
 
 func (l *ListsHandlers) Show(c *fiber.Ctx) error {
@@ -157,15 +151,12 @@ func (l *ListsHandlers) Show(c *fiber.Ctx) error {
 		return fiber.NewError(http.StatusBadRequest, err.Error())
 	}
 
-	result, err := l.repo.GetListById(c.Context(), params.ID)
+	_, err := l.repo.GetListById(c.Context(), params.ID)
 	if err != nil {
 		return err
 	}
 
-	return c.Render("lists/show", fiber.Map{
-		"Title": "List",
-		"List":  result,
-	})
+	panic("not implemented")
 }
 
 func (l *ListsHandlers) Edit(c *fiber.Ctx) error {
@@ -181,11 +172,10 @@ func (l *ListsHandlers) Edit(c *fiber.Ctx) error {
 		return err
 	}
 
-	c.Set("Content-Type", "text/html; charset=utf-8")
-	return listviews.Card(view.Card{
+	return view.RenderComponent(c, 200, listviews.Card(view.Card{
 		EditingName: true,
 		List:        result,
-	}).Render(c.Context(), c)
+	}))
 }
 
 type CreateListRequest struct {
@@ -210,11 +200,10 @@ func (l *ListsHandlers) Create(c *fiber.Ctx) error {
 		return err
 	}
 
-	c.Set("Content-Type", "text/html; charset=utf-8")
-	return listviews.Card(view.Card{
+	return view.RenderComponent(c, 200, listviews.Card(view.Card{
 		EditingName: false,
 		List:        result,
-	}).Render(c.Context(), c)
+	}))
 }
 
 type UpdateListRequest struct {
@@ -244,11 +233,10 @@ func (l *ListsHandlers) Update(c *fiber.Ctx) error {
 		return err
 	}
 
-	c.Set("Content-Type", "text/html; charset=utf-8")
-	return listviews.Card(view.Card{
+	return view.RenderComponent(c, 200, listviews.Card(view.Card{
 		EditingName: false,
 		List:        list,
-	}).Render(c.Context(), c)
+	}))
 }
 
 func (l *ListsHandlers) Delete(c *fiber.Ctx) error {

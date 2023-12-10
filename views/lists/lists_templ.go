@@ -13,7 +13,7 @@ import "bytes"
 import (
 	"htmxtodo/gen/htmxtodo_dev/public/model"
 	"htmxtodo/internal/view"
-	"htmxtodo/views"
+	"htmxtodo/views/layouts"
 )
 
 func Index(cards []view.Card, newList model.List) templ.Component {
@@ -29,7 +29,7 @@ func Index(cards []view.Card, newList model.List) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = views.Layout(index(cards, newList), "Lists").Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = layouts.Main(index(cards, newList), "Lists").Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

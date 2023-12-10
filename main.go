@@ -2,16 +2,12 @@ package main
 
 import (
 	"database/sql"
-	"embed"
 	"github.com/joho/godotenv"
 	"htmxtodo/internal/app"
 	"htmxtodo/internal/repo"
 	"log"
 	"os"
 )
-
-//go:embed all:views/*
-var viewsFS embed.FS
 
 func main() {
 	err := godotenv.Load()
@@ -32,7 +28,7 @@ func main() {
 
 	r := repo.New(db)
 
-	config := app.NewConfigFromEnvironment(viewsFS, r)
+	config := app.NewConfigFromEnvironment(r)
 
 	a := app.New(&config)
 
