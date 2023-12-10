@@ -33,12 +33,14 @@ templ Main(contents templ.Component, title string) {
 		}
 
 		document.addEventListener('DOMContentLoaded', function () {
+			// add X-CSRF-Token to all requests:
 			document.body.addEventListener('htmx:configRequest', function (event) {
 				if (event.detail.verb !== "get") {
 					event.detail.headers['X-CSRF-Token'] = getCsrfToken();
 				}
 			});
 
+			// treat 204 "no content" same as 200 "success":
 			document.body.addEventListener('htmx:beforeSwap', function (event) {
 				if (event.detail.xhr.status === 204) {
 					event.detail.shouldSwap = true;
