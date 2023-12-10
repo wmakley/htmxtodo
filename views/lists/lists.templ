@@ -20,14 +20,12 @@ templ index(cards []CardProps, newList model.List) {
 }
 
 templ Card(card CardProps) {
-	<div class="tile list-card" id={ card.Id() }>
+	<div class="tile list-card" id={ card.Id() } hx-target="this" hx-swap="outerHTML">
 		<div class="card mb-3">
 			<header class="card-header">
 				<p class="card-header-title">
 					if card.EditingName {
-						<form hx-patch={ card.ListUrl() }
-							  hx-target="closest .list-card"
-							  hx-swap="outerHTML">
+						<form hx-patch={ card.ListUrl() }>
 							<input type="text"
 								   value={ card.List.Name }
 								   class="input"
@@ -44,8 +42,7 @@ templ Card(card CardProps) {
 						}
 						<button type="button"
 								class="button is-link is-small ml-2"
-								hx-get={ card.EditListUrl() }
-								hx-target="closest .list-card">Edit
+								hx-get={ card.EditListUrl() }>Edit
 						</button>
 					}
 				</p>
@@ -65,7 +62,6 @@ templ Card(card CardProps) {
 				<a href="#" class="card-footer-item"
 				   hx-confirm="Are you sure you want to delete this list?"
 				   hx-delete={ card.ListUrl() }
-				   hx-target="closest .list-card"
 				   hx-swap="delete">Delete</a>
 			</footer>
 		</div>
