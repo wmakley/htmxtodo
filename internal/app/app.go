@@ -15,6 +15,7 @@ import (
 	"htmxtodo/gen/htmxtodo_dev/public/model"
 	"htmxtodo/internal/repo"
 	"htmxtodo/internal/view"
+	errorviews "htmxtodo/views/errors"
 	listviews "htmxtodo/views/lists"
 	"net/http"
 	"os"
@@ -101,25 +102,14 @@ func errorHandler(c *fiber.Ctx, err error) error {
 		code = http.StatusNotFound
 	}
 
-	// RenderComponent a template for 404 errors
+	// Render a template for 404 errors
 	if code == http.StatusNotFound {
-		return c.Status(code).Render("errors/404", fiber.Map{
-			"Title":      "404 - Not Found",
-			"StatusCode": code,
-		})
+		return view.RenderComponent(c, code, errorviews.Error404())
 	}
 
-	// Set Default Content-Type: text/plain; charset=utf-8
-	c.Set(fiber.HeaderContentType, fiber.MIMETextPlainCharsetUTF8)
-
-	// Hide internal server error messages from external users
-	if code == http.StatusInternalServerError {
-		fiberlog.Error(msg)
-		msg = "500 Internal Server Error"
-	}
-
-	// Return status code with error message
-	return c.Status(code).SendString(msg)
+	// Log 500 errors and also render a default template
+	fiberlog.Error(msg)
+	return view.RenderComponent(c, code, errorviews.Error500())
 }
 
 type ListsHandlers struct {

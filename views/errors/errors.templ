@@ -1,0 +1,21 @@
+package errors
+
+import (
+	"htmxtodo/views/layouts"
+)
+
+templ Error404() {
+	@layouts.Main(error404Content(), "404 - Not Found")
+}
+
+templ error404Content() {
+	<h1>404 - Not Found</h1>
+}
+
+templ Error500() {
+	@layouts.Main(error500Content(), "500 - Internal Server Error")
+}
+
+templ error500Content() {
+	<h1>500 - Internal Server Error</h1>
+}
