@@ -1,9 +1,7 @@
-{{ define "content" }}
-	<h1 class="title">Lists</h1>
-	<div id="lists" class="tile is-ancestor">
-        {{ range .Lists }}
-            {{ template "_card.tmpl" . }}
-        {{ end }}
-	</div>
-    {{template "_form.tmpl" .NewList}}
-{{ end }}
+<h1 class="title">Lists</h1>
+<div id="lists" class="tile is-ancestor">
+    {{ range .Lists }}
+        {{ template "lists/_card" . }}
+    {{ end }}
+</div>
+{{template "lists/_form" .NewList}}

@@ -1,10 +1,13 @@
+package views
+
+templ Layout(contents templ.Component, title string) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-	<meta charset="utf-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<title>{{.Title}} - Htmxtodo</title>
-	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+	<meta charset="utf-8"/>
+	<meta name="viewport" content="width=device-width, initial-scale=1"/>
+	<title>{ title } - Htmxtodo</title>
+	<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css"/>
 	<script src="https://unpkg.com/htmx.org@1.9.4"
 			integrity="sha384-zUfuhFKKZCbHTY6aRR46gxiqszMk5tcHjsVFxnUo8VMus4kHGVdIYVbOYYNlKmHV"
 			crossorigin="anonymous"></script>
@@ -29,7 +32,6 @@
 			return c_value;
 		}
 
-
 		document.addEventListener('DOMContentLoaded', function () {
 			document.body.addEventListener('htmx:configRequest', function (event) {
 				if (event.detail.verb !== "get") {
@@ -44,14 +46,15 @@
 			});
 		});
 	</script>
-    {{ block "head" . }}{{ end }}
 </head>
 <body>
 <section class="section">
 	<div class="container">
 		<div class="content">
-            {{ template "content" . }}
+            @contents
 		</div>
 	</div>
 </section>
 </body>
+</html>
+}

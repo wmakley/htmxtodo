@@ -33,7 +33,7 @@ const (
 	Suffix        = ".tmpl"
 	Shared        = "shared"
 	Layouts       = "layouts"
-	DefaultLayout = "main" + Suffix
+	DefaultLayout = "main"
 )
 
 func New(config Config) fiber.Views {
@@ -69,7 +69,7 @@ func (v *view) Load() error {
 	layouts := v.listLayouts()
 	viewDirs := v.listViewDirs()
 
-	mainLayout := filepath.Join(v.config.Path, Layouts, DefaultLayout)
+	mainLayout := filepath.Join(v.config.Path, Layouts, DefaultLayout+Suffix)
 
 	// File system prefix to strip off to generate view names.
 	stripPrefix := v.config.Path + string(os.PathSeparator)

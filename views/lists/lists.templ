@@ -1,0 +1,99 @@
+package lists
+
+import (
+	"htmxtodo/gen/htmxtodo_dev/public/model"
+	"htmxtodo/internal/view"
+	"htmxtodo/views"
+)
+
+templ Index(cards []view.Card, newList model.List) {
+	@views.Layout(index(cards, newList), "Lists")
+}
+
+templ index(cards []view.Card, newList model.List) {
+	<h1 class="title">Lists</h1>
+	<div id="lists" class="tile is-ancestor">
+		for _, card := range cards {
+			@Card(card)
+	  	}
+	</div>
+	@Form(newList, "")
+}
+
+templ Card(card view.Card) {
+	<div class="tile" id={ card.Id() }>
+		<div class="card mb-3">
+			<header class="card-header">
+				<p class="card-header-title">
+					if card.EditingName {
+						<form hx-patch={ card.PatchUrl() }
+							  hx-target={ card.Selector() }
+							  hx-swap="outerHTML">
+							<input type="text"
+								   value={ card.List.Name }
+								   class="input"
+								   placeholder="Name"
+								   aria-label="Name"
+								   name="name"/>
+							<button class="button is-link is-small ml-2">Save</button>
+						</form>
+					} else {
+						if card.List.Name != "" {
+							{card.List.Name}
+						} else {
+							(Untitled List)
+						}
+						<button type="button"
+								class="button is-link is-small ml-2"
+								hx-get={ card.EditUrl() }
+								hx-target={ card.Selector() }>Edit
+						</button>
+					}
+				</p>
+			</header>
+			<div class="card-content">
+				<div class="content">
+					<ul>
+						<li>Item 1</li>
+						<li>Item 2</li>
+						<li>Item 3</li>
+					</ul>
+				</div>
+			</div>
+			<footer class="card-footer">
+				<a href="#" class="card-footer-item">Save</a>
+				<a href="#" class="card-footer-item">Edit</a>
+				<a href="#" class="card-footer-item"
+				   hx-confirm="Are you sure you want to delete this list?"
+				   hx-delete={ card.DeleteUrl() }
+				   hx-target={ card.Selector() }
+				   hx-swap="delete">Delete</a>
+			</footer>
+		</div>
+	</div>
+}
+
+
+templ Form(newList model.List, errors string) {
+	<form id="create-list-form"
+		  hx-post="/lists"
+		  hx-target="#lists"
+		  hx-swap="beforeend scroll:bottom">
+		<div class="field">
+			<label class="label" for="list_name">Add List:</label>
+			<div class="control">
+				<input id="list_name" class="input" type="text" placeholder="Name" name="name" value={ newList.Name } />
+			</div>
+			<p>{errors}</p>
+		</div>
+
+		<div class="field is-grouped">
+			<div class="control">
+				<button class="button is-link">Submit</button>
+			</div>
+			<div class="control">
+				<button type="reset" class="button is-link is-light">Cancel</button>
+			</div>
+		</div>
+	</form>
+}

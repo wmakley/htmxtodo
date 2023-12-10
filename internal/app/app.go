@@ -12,10 +12,12 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/helmet"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
+	engine "github.com/gofiber/template/html/v2"
 	_ "github.com/lib/pq"
 	"htmxtodo/gen/htmxtodo_dev/public/model"
 	"htmxtodo/internal/repo"
 	"htmxtodo/internal/view"
+	listviews "htmxtodo/views/lists"
 	"net/http"
 	"os"
 	"strings"
@@ -50,11 +52,7 @@ func New(config *Config) *fiber.App {
 	app := fiber.New(fiber.Config{
 		AppName:      "HtmxTodo 0.1.0",
 		ErrorHandler: errorHandler,
-		Views: view.New(view.Config{
-			CompileOnRender: config.Env == Development,
-			Path:            "views",
-			FS:              config.ViewsFS,
-		}),
+		Views:        engine.New("views", ".tmpl"),
 	})
 
 	app.Use(logger.New(logger.Config{
@@ -147,11 +145,8 @@ func (l *ListsHandlers) Index(c *fiber.Ctx) error {
 		}
 	}
 
-	return c.Render("lists/index", fiber.Map{
-		"Title":   "Lists",
-		"Lists":   viewObjects,
-		"NewList": model.List{},
-	})
+	c.Set("Content-Type", "text/html; charset=utf-8")
+	return listviews.Index(viewObjects, model.List{}).Render(c.Context(), c)
 }
 
 func (l *ListsHandlers) Show(c *fiber.Ctx) error {
@@ -186,10 +181,11 @@ func (l *ListsHandlers) Edit(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.Render("lists/_card", view.Card{
+	c.Set("Content-Type", "text/html; charset=utf-8")
+	return listviews.Card(view.Card{
 		EditingName: true,
 		List:        result,
-	})
+	}).Render(c.Context(), c)
 }
 
 type CreateListRequest struct {
@@ -214,10 +210,11 @@ func (l *ListsHandlers) Create(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.Render("lists/_card", view.Card{
+	c.Set("Content-Type", "text/html; charset=utf-8")
+	return listviews.Card(view.Card{
 		EditingName: false,
 		List:        result,
-	})
+	}).Render(c.Context(), c)
 }
 
 type UpdateListRequest struct {
@@ -247,10 +244,11 @@ func (l *ListsHandlers) Update(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.Render("lists/_card", view.Card{
+	c.Set("Content-Type", "text/html; charset=utf-8")
+	return listviews.Card(view.Card{
 		EditingName: false,
 		List:        list,
-	})
+	}).Render(c.Context(), c)
 }
 
 func (l *ListsHandlers) Delete(c *fiber.Ctx) error {
