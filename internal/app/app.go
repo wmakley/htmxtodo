@@ -72,7 +72,6 @@ func New(config *Config) *fiber.App {
 	lists := ListsHandlers{repo: config.Repo}
 
 	app.Get("/lists", lists.Index)
-	app.Get("/lists/:id", lists.Show)
 	app.Post("/lists", lists.Create)
 	app.Get("/lists/:id/edit", lists.Edit)
 	app.Patch("/lists/:id", lists.Update)
@@ -122,31 +121,16 @@ func (l *ListsHandlers) Index(c *fiber.Ctx) error {
 		return err
 	}
 
-	viewObjects := make([]view.Card, len(results))
+	cards := make([]listviews.CardProps, len(results))
 	for i, result := range results {
-		viewObjects[i] = view.Card{
+		cards[i] = listviews.CardProps{
 			EditingName: false,
 			List:        result,
 		}
 	}
+	newList := model.List{}
 
-	return view.RenderComponent(c, 200, listviews.Index(viewObjects, model.List{}))
-}
-
-func (l *ListsHandlers) Show(c *fiber.Ctx) error {
-	var params struct {
-		ID int64 `params:"id"`
-	}
-	if err := c.ParamsParser(&params); err != nil {
-		return fiber.NewError(http.StatusBadRequest, err.Error())
-	}
-
-	_, err := l.repo.GetListById(c.Context(), params.ID)
-	if err != nil {
-		return err
-	}
-
-	panic("not implemented")
+	return view.RenderComponent(c, 200, listviews.Index(cards, newList))
 }
 
 func (l *ListsHandlers) Edit(c *fiber.Ctx) error {
@@ -162,7 +146,7 @@ func (l *ListsHandlers) Edit(c *fiber.Ctx) error {
 		return err
 	}
 
-	return view.RenderComponent(c, 200, listviews.Card(view.Card{
+	return view.RenderComponent(c, 200, listviews.Card(listviews.CardProps{
 		EditingName: true,
 		List:        result,
 	}))
@@ -190,7 +174,7 @@ func (l *ListsHandlers) Create(c *fiber.Ctx) error {
 		return err
 	}
 
-	return view.RenderComponent(c, 200, listviews.Card(view.Card{
+	return view.RenderComponent(c, 200, listviews.Card(listviews.CardProps{
 		EditingName: false,
 		List:        result,
 	}))
@@ -223,7 +207,7 @@ func (l *ListsHandlers) Update(c *fiber.Ctx) error {
 		return err
 	}
 
-	return view.RenderComponent(c, 200, listviews.Card(view.Card{
+	return view.RenderComponent(c, 200, listviews.Card(listviews.CardProps{
 		EditingName: false,
 		List:        list,
 	}))

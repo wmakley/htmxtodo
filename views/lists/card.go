@@ -1,31 +1,27 @@
-package view
+package lists
 
 import (
 	"fmt"
 	"htmxtodo/gen/htmxtodo_dev/public/model"
 )
 
-type Card struct {
+type CardProps struct {
+	model.List
 	EditingName bool
-	List        model.List
 }
 
-func (c Card) DeleteUrl() string {
+func (c CardProps) ListUrl() string {
 	return fmt.Sprintf("/lists/%d", c.List.ID)
 }
 
-func (c Card) PatchUrl() string {
-	return fmt.Sprintf("/lists/%d", c.List.ID)
-}
-
-func (c Card) EditUrl() string {
+func (c CardProps) EditListUrl() string {
 	return fmt.Sprintf("/lists/%d/edit", c.List.ID)
 }
 
-func (c Card) Id() string {
+func (c CardProps) Id() string {
 	return fmt.Sprintf("card-%d", c.List.ID)
 }
 
-func (c Card) Selector() string {
+func (c CardProps) Selector() string {
 	return fmt.Sprintf("#card-%d", c.List.ID)
 }
