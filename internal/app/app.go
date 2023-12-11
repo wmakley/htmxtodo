@@ -174,7 +174,7 @@ func (l *ListsHandlers) Create(c *fiber.Ctx) error {
 		return err
 	}
 
-	return view.RenderComponent(c, 200, listviews.Card(listviews.CardProps{
+	return view.RenderComponent(c, 200, listviews.CreateSuccess(listviews.CardProps{
 		EditingName: false,
 		List:        result,
 	}))

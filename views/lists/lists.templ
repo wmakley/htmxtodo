@@ -73,7 +73,8 @@ templ Form(newList model.List, errors string) {
 	<form id="create-list-form"
 		  hx-post="/lists"
 		  hx-target="#lists"
-		  hx-swap="beforeend scroll:bottom">
+		  hx-swap="beforeend scroll:bottom"
+		  hx-swap-oob="true">
 		<div class="field">
 			<label class="label" for="list_name">Add List:</label>
 			<div class="control">
@@ -91,4 +92,9 @@ templ Form(newList model.List, errors string) {
 			</div>
 		</div>
 	</form>
+}
+
+templ CreateSuccess(createdListCard CardProps) {
+	@Card(createdListCard)
+	@Form(model.List{}, "")
 }
