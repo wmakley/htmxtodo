@@ -2,6 +2,9 @@ build/app: templ
 	mkdir -p build
 	go build -o $@ .
 
+tmp/main: templ
+	go build -o $@ .
+
 serve: templ
 	go run .
 

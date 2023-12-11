@@ -16,3 +16,7 @@ rustc-*
 
 # Only commit original templ for now
 *_templ.go
+
+# Temp files
+!/tmp/.keep
+/tmp
