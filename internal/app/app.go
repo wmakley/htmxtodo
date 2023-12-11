@@ -96,7 +96,7 @@ func errorHandler(c *fiber.Ctx, err error) error {
 		code = http.StatusNotFound
 	}
 
-	// Parameter decoding errors are errors bad route, meaning not found (but may also be bugs)
+	// Parameter decoding errors indicate user input did not match the route, i.e. not found (but may also be bugs)
 	if strings.HasPrefix(msg, "failed to decode:") {
 		code = http.StatusNotFound
 	}
@@ -166,7 +166,9 @@ func (l *ListsHandlers) Create(c *fiber.Ctx) error {
 
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		return fiber.NewError(http.StatusBadRequest, "name is required")
+		return view.RenderComponent(c, http.StatusUnprocessableEntity, listviews.CreateFailure(model.List{
+			Name: req.Name,
+		}, "name is required"))
 	}
 
 	result, err := l.repo.CreateList(c.Context(), req.Name)

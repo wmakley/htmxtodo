@@ -42,7 +42,8 @@ templ Main(contents templ.Component, title string) {
 
 			// treat 204 "no content" same as 200 "success":
 			document.body.addEventListener('htmx:beforeSwap', function (event) {
-				if (event.detail.xhr.status === 204) {
+				const status = event.detail.xhr.status;
+				if (status === 204 || status === 422) {
 					event.detail.shouldSwap = true;
 				}
 			});
