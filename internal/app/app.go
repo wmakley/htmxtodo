@@ -1,25 +1,33 @@
 package app
 
 import (
-	"database/sql"
-	"errors"
+	"context"
+	"encoding/json"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
+	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
+	"github.com/clerkinc/clerk-sdk-go/clerk"
 	"github.com/gofiber/fiber/v2"
 	fiberlog "github.com/gofiber/fiber/v2/log"
 	"github.com/gofiber/fiber/v2/middleware/compress"
-	"github.com/gofiber/fiber/v2/middleware/csrf"
 	"github.com/gofiber/fiber/v2/middleware/favicon"
 	"github.com/gofiber/fiber/v2/middleware/helmet"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/gofiber/fiber/v2/middleware/session"
 	_ "github.com/lib/pq"
 	"htmxtodo/gen/htmxtodo_dev/public/model"
 	"htmxtodo/internal/repo"
 	"htmxtodo/internal/view"
-	errorviews "htmxtodo/views/errors"
 	listviews "htmxtodo/views/lists"
+	loginviews "htmxtodo/views/login"
 	"net/http"
 	"os"
 	"strings"
+
+	_ "github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	cognito "github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 )
 
 // Config is the global config for the app router. Host and Port are needed for absolute URL generation.
@@ -60,62 +68,140 @@ func New(config *Config) *fiber.App {
 	app.Use(compress.New())
 	app.Use(helmet.New())
 	app.Use(favicon.New())
-	app.Use(csrf.New(csrf.Config{
-		CookieName: "csrf_htmxtodo",
-		ContextKey: csrfToken,
-	}))
+	//app.Use(csrf.New(csrf.Config{
+	//	CookieName: "csrf_htmxtodo",
+	//	ContextKey: csrfToken,
+	//}))
+
+	sessionStore := session.New()
+
+	awsCfg, err := awsconfig.LoadDefaultConfig(context.TODO())
+	if err != nil {
+		fiberlog.Fatal(err)
+	}
+
+	cognitoClient := cognito.NewFromConfig(awsCfg)
+
+	login := LoginHandlers{
+		sessionStore:    sessionStore,
+		cognitoClient:   cognitoClient,
+		cognitoClientId: os.Getenv("COGNITO_CLIENT_ID"),
+	}
+
+	lists := ListsHandlers{
+		repo:         config.Repo,
+		sessionStore: sessionStore,
+	}
 
 	app.Get("/", func(c *fiber.Ctx) error {
-		return c.Redirect("/lists", http.StatusFound)
+		return c.Redirect("/login", http.StatusFound)
 	})
+	app.Get("/login", login.LoginForm)
+	app.Post("/login", login.SubmitLogin)
 
-	lists := ListsHandlers{repo: config.Repo}
+	app.Get("/register", login.Register)
+	app.Post("/register", login.SubmitRegistration)
 
-	app.Get("/lists", lists.Index)
-	app.Post("/lists", lists.Create)
-	app.Get("/lists/:id/edit", lists.Edit)
-	app.Patch("/lists/:id", lists.Update)
-	app.Delete("/lists/:id", lists.Delete)
+	internal := app.Group("")
+
+	internal.Get("/lists", lists.Index)
+	internal.Post("/lists", lists.Create)
+	internal.Get("/lists/:id/edit", lists.Edit)
+	internal.Patch("/lists/:id", lists.Update)
+	internal.Delete("/lists/:id", lists.Delete)
 
 	return app
 }
 
-func errorHandler(c *fiber.Ctx, err error) error {
-	// Status code defaults to 500
-	code := http.StatusInternalServerError
-	msg := err.Error()
+type LoginHandlers struct {
+	sessionStore    *session.Store
+	cognitoClient   *cognitoidentityprovider.Client
+	cognitoClientId string
+}
 
-	// Retrieve the custom status code if it's a *fiber.Error
-	var e *fiber.Error
-	if errors.As(err, &e) {
-		code = e.Code
+func (l *LoginHandlers) LoginForm(c *fiber.Ctx) error {
+	form := loginviews.LoginForm{}
+	return view.RenderComponent(c, 200, loginviews.Login(form))
+}
+
+func (l *LoginHandlers) SubmitLogin(c *fiber.Ctx) error {
+	var form loginviews.LoginForm
+
+	err := c.BodyParser(&form)
+	if err != nil {
+		return err
 	}
 
-	// Special handling for other error types
-	if errors.Is(err, sql.ErrNoRows) {
-		code = http.StatusNotFound
+	fiberlog.Debug("form:", form)
+	return view.RenderComponent(c, 200, loginviews.Login(form))
+}
+
+func (l *LoginHandlers) Register(c *fiber.Ctx) error {
+	form := loginviews.RegistrationForm{}
+	return view.RenderComponent(c, 200, loginviews.Register(form, ""))
+}
+
+func (l *LoginHandlers) SubmitRegistration(c *fiber.Ctx) error {
+	var form loginviews.RegistrationForm
+
+	err := c.BodyParser(&form)
+	if err != nil {
+		return err
 	}
 
-	// Parameter decoding errors indicate user input did not match the route, i.e. not found (but may also be bugs)
-	if strings.HasPrefix(msg, "failed to decode:") {
-		code = http.StatusNotFound
+	fiberlog.Debug("form:", form)
+
+	// validation:
+
+	if form.Password != form.PasswordConfirmation {
+		return view.RenderComponent(c, http.StatusUnprocessableEntity,
+			loginviews.Register(form, "passwords do not match"))
 	}
 
-	// Render a template for 404 errors
-	if code == http.StatusNotFound {
-		return view.RenderComponent(c, code, errorviews.Error404())
+	signUpInput := &cognito.SignUpInput{
+		ClientId:   aws.String(l.cognitoClientId),
+		Password:   aws.String(form.Password),
+		Username:   aws.String(form.Email),
+		SecretHash: nil,
+		UserAttributes: []types.AttributeType{
+			{
+				Name:  aws.String("email"),
+				Value: aws.String(form.Email),
+			},
+		},
+		UserContextData: &types.UserContextDataType{
+			EncodedData: nil,
+			IpAddress:   aws.String(c.IP()),
+		},
+		ValidationData: nil,
 	}
 
-	// Log 500 errors and also render a default template
-	fiberlog.Error(msg)
-	return view.RenderComponent(c, code, errorviews.Error500())
+	_, err = l.cognitoClient.SignUp(c.Context(), signUpInput)
+	if err != nil {
+		return view.RenderComponent(c, http.StatusUnprocessableEntity, loginviews.Register(form, err.Error()))
+	}
+
+	return c.Redirect("/lists", http.StatusFound)
 }
 
 type ListsHandlers struct {
-	repo repo.Repository
+	repo         repo.Repository
+	sessionStore *session.Store
+	clerk        clerk.Client
 }
 
 func (l *ListsHandlers) Index(c *fiber.Ctx) error {
+	sessionClaims, ok := clerk.SessionFromContext(c.Context())
+	if ok {
+		jsonResp, err := json.Marshal(sessionClaims)
+		if err != nil {
+			panic(err)
+		}
+		fiberlog.Debug(string(jsonResp))
+	} else {
+		fiberlog.Error("could not get clerk session")
+	}
+
 	results, err := l.repo.FilterLists(c.Context())
 	if err != nil {
 		return err

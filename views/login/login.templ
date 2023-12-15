@@ -1,0 +1,137 @@
+package login
+
+import (
+	"htmxtodo/views/layouts"
+)
+
+templ Login(form LoginForm) {
+	@layouts.Main(login(form), "Login")
+}
+
+templ login(form LoginForm) {
+	<h1 class="title">Login</h1>
+
+	<form method="POST" action="/login" id="login-form">
+		<div class="field">
+			<label class="label" for="register_email">Email</label>
+			<div class="control has-icons-left has-icons-right">
+				<input class="input"
+					type="email"
+					name="email"
+					id="register_email"
+					placeholder="Email"
+					required
+					value={form.Email}/>
+				<span class="icon is-small is-left">
+					<i class="fas fa-envelope"></i>
+				</span>
+				<span class="icon is-small is-right">
+					<i class="fas fa-exclamation-triangle"></i>
+				</span>
+			</div>
+		</div>
+
+		<div class="field">
+			<label class="label" for="register_password">Password</label>
+			<div class="control has-icons-left">
+				<input class="input"
+					type="password"
+					name="password"
+					id="register_password"
+					placeholder="Password"
+					required
+					value={form.Password} />
+				<span class="icon is-small is-left">
+					<i class="fas fa-lock"></i>
+				</span>
+			</div>
+		</div>
+
+		<div class="field">
+			<p class="control">
+				<button type="submit" class="button is-success">
+					Submit
+				</button>
+			</p>
+		</div>
+	</form>
+
+	<p>
+		<a href="/register" hx-boost="true">Register</a>
+	</p>
+}
+
+templ Register(form RegistrationForm, errorMsg string) {
+	@layouts.Main(register(form, errorMsg), "Register")
+}
+
+templ register(form RegistrationForm, errorMsg string) {
+	<h1 class="title">Register</h1>
+
+	<form method="POST" action="/register" id="registration-form">
+		<p class="is-danger">{errorMsg}</p>
+
+		<div class="field">
+			<label class="label" for="register_email">Email</label>
+			<div class="control has-icons-left has-icons-right">
+				<input class="input"
+					type="email"
+					name="email"
+					id="register_email"
+					placeholder="Email input"
+					required
+					value={form.Email}/>
+				<span class="icon is-small is-left">
+					<i class="fas fa-envelope"></i>
+				</span>
+				<span class="icon is-small is-right">
+					<i class="fas fa-exclamation-triangle"></i>
+				</span>
+			</div>
+		</div>
+
+		<div class="field">
+			<label class="label" for="register_password">Password</label>
+			<div class="control has-icons-left">
+				<input class="input"
+					type="password"
+					name="password"
+					id="register_password"
+					required
+					placeholder="Password"
+					value={form.Password} />
+				<span class="icon is-small is-left">
+					<i class="fas fa-lock"></i>
+				</span>
+			</div>
+		</div>
+
+		<div class="field">
+			<label class="label" for="register_password_confirmation">Password Confirmation</label>
+			<div class="control has-icons-left">
+				<input class="input"
+					type="password"
+					name="password_confirmation"
+					id="register_password_confirmation"
+					required
+					placeholder="Type your password again"
+					value={form.PasswordConfirmation} />
+				<span class="icon is-small is-left">
+					<i class="fas fa-lock"></i>
+				</span>
+			</div>
+		</div>
+
+		<div class="field">
+		  <p class="control">
+			<button type="submit" class="button is-success">
+			  Submit
+			</button>
+		  </p>
+		</div>
+	</form>
+
+	<p>
+		<a href="/login" hx-boost="true">Login</a>
+	</p>
+}
