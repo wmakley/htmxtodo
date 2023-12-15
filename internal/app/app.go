@@ -2,11 +2,9 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
-	"github.com/clerkinc/clerk-sdk-go/clerk"
 	"github.com/gofiber/fiber/v2"
 	fiberlog "github.com/gofiber/fiber/v2/log"
 	"github.com/gofiber/fiber/v2/middleware/compress"
@@ -187,21 +185,9 @@ func (l *LoginHandlers) SubmitRegistration(c *fiber.Ctx) error {
 type ListsHandlers struct {
 	repo         repo.Repository
 	sessionStore *session.Store
-	clerk        clerk.Client
 }
 
 func (l *ListsHandlers) Index(c *fiber.Ctx) error {
-	sessionClaims, ok := clerk.SessionFromContext(c.Context())
-	if ok {
-		jsonResp, err := json.Marshal(sessionClaims)
-		if err != nil {
-			panic(err)
-		}
-		fiberlog.Debug(string(jsonResp))
-	} else {
-		fiberlog.Error("could not get clerk session")
-	}
-
 	results, err := l.repo.FilterLists(c.Context())
 	if err != nil {
 		return err
