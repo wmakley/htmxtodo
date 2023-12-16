@@ -3,11 +3,15 @@ package app
 import (
 	"context"
 	"github.com/aws/aws-sdk-go-v2/aws"
+	_ "github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
+	cognito "github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 	"github.com/gofiber/fiber/v2"
 	fiberlog "github.com/gofiber/fiber/v2/log"
 	"github.com/gofiber/fiber/v2/middleware/compress"
+	"github.com/gofiber/fiber/v2/middleware/csrf"
 	"github.com/gofiber/fiber/v2/middleware/favicon"
 	"github.com/gofiber/fiber/v2/middleware/helmet"
 	"github.com/gofiber/fiber/v2/middleware/logger"
@@ -17,15 +21,11 @@ import (
 	"htmxtodo/gen/htmxtodo_dev/public/model"
 	"htmxtodo/internal/repo"
 	"htmxtodo/internal/view"
+	errorviews "htmxtodo/views/errors"
 	listviews "htmxtodo/views/lists"
 	loginviews "htmxtodo/views/login"
-	"net/http"
 	"os"
 	"strings"
-
-	_ "github.com/aws/aws-sdk-go-v2/aws"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
-	cognito "github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
 )
 
 // Config is the global config for the app router. Host and Port are needed for absolute URL generation.
@@ -57,6 +57,8 @@ func New(config *Config) *fiber.App {
 		ErrorHandler: errorHandler,
 	})
 
+	sessionStore := session.New()
+
 	app.Use(logger.New(logger.Config{
 		DisableColors: config.Env == Production,
 	}))
@@ -66,12 +68,17 @@ func New(config *Config) *fiber.App {
 	app.Use(compress.New())
 	app.Use(helmet.New())
 	app.Use(favicon.New())
-	//app.Use(csrf.New(csrf.Config{
-	//	CookieName: "csrf_htmxtodo",
-	//	ContextKey: csrfToken,
-	//}))
-
-	sessionStore := session.New()
+	app.Use(csrf.New(csrf.Config{
+		CookieSecure: os.Getenv("ENV") == "production",
+		Session:      sessionStore,
+		ErrorHandler: func(c *fiber.Ctx, err error) error {
+			fiberlog.Error("CSRF error: ", err.Error())
+			return view.RenderComponent(c, fiber.StatusForbidden,
+				errorviews.GenericError(fiber.StatusForbidden, "Forbidden"))
+		},
+		ContextKey: csrfToken,
+		CookieName: "csrf_htmxtodo",
+	}))
 
 	awsCfg, err := awsconfig.LoadDefaultConfig(context.TODO())
 	if err != nil {
@@ -92,7 +99,7 @@ func New(config *Config) *fiber.App {
 	}
 
 	app.Get("/", func(c *fiber.Ctx) error {
-		return c.Redirect("/login", http.StatusFound)
+		return c.Redirect("/login", fiber.StatusFound)
 	})
 	app.Get("/login", login.LoginForm)
 	app.Post("/login", login.SubmitLogin)
@@ -100,7 +107,19 @@ func New(config *Config) *fiber.App {
 	app.Get("/register", login.Register)
 	app.Post("/register", login.SubmitRegistration)
 
-	internal := app.Group("")
+	internal := app.Group("", func(c *fiber.Ctx) error {
+		sess, err := sessionStore.Get(c)
+		if err != nil {
+			panic(err)
+		}
+
+		loggedIn := sess.Get("logged_in")
+		if loggedIn != "true" {
+			return view.RenderComponent(c, fiber.StatusForbidden, errorviews.Error403())
+		}
+
+		return c.Next()
+	})
 
 	internal.Get("/lists", lists.Index)
 	internal.Post("/lists", lists.Create)
@@ -131,7 +150,27 @@ func (l *LoginHandlers) SubmitLogin(c *fiber.Ctx) error {
 	}
 
 	fiberlog.Debug("form:", form)
+
+	sess, err := l.sessionStore.Get(c)
+	if err != nil {
+		panic(err)
+	}
+
+	sess.Set("logged_in", "true")
+
 	return view.RenderComponent(c, 200, loginviews.Login(form))
+}
+
+func (l *LoginHandlers) Logout(c *fiber.Ctx) error {
+	sess, err := l.sessionStore.Get(c)
+	if err != nil {
+		panic(err)
+	}
+
+	sess.Delete("logged_in")
+
+	c.Set("HX-Location", "/")
+	return c.Redirect("/", fiber.StatusFound)
 }
 
 func (l *LoginHandlers) Register(c *fiber.Ctx) error {
@@ -152,7 +191,7 @@ func (l *LoginHandlers) SubmitRegistration(c *fiber.Ctx) error {
 	// validation:
 
 	if form.Password != form.PasswordConfirmation {
-		return view.RenderComponent(c, http.StatusUnprocessableEntity,
+		return view.RenderComponent(c, fiber.StatusUnprocessableEntity,
 			loginviews.Register(form, "passwords do not match"))
 	}
 
@@ -176,10 +215,11 @@ func (l *LoginHandlers) SubmitRegistration(c *fiber.Ctx) error {
 
 	_, err = l.cognitoClient.SignUp(c.Context(), signUpInput)
 	if err != nil {
-		return view.RenderComponent(c, http.StatusUnprocessableEntity, loginviews.Register(form, err.Error()))
+		return view.RenderComponent(c, fiber.StatusUnprocessableEntity, loginviews.Register(form, err.Error()))
 	}
 
-	return c.Redirect("/lists", http.StatusFound)
+	c.Set("HX-Location", "/lists")
+	return c.Redirect("/lists", fiber.StatusFound)
 }
 
 type ListsHandlers struct {
@@ -210,7 +250,7 @@ func (l *ListsHandlers) Edit(c *fiber.Ctx) error {
 		ID int64 `params:"id"`
 	}
 	if err := c.ParamsParser(&params); err != nil {
-		return fiber.NewError(http.StatusBadRequest, err.Error())
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
 
 	result, err := l.repo.GetListById(c.Context(), params.ID)
@@ -238,7 +278,7 @@ func (l *ListsHandlers) Create(c *fiber.Ctx) error {
 
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		return view.RenderComponent(c, http.StatusUnprocessableEntity, listviews.CreateFailure(model.List{
+		return view.RenderComponent(c, fiber.StatusUnprocessableEntity, listviews.CreateFailure(model.List{
 			Name: req.Name,
 		}, "name is required"))
 	}
@@ -273,7 +313,7 @@ func (l *ListsHandlers) Update(c *fiber.Ctx) error {
 
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		return fiber.NewError(http.StatusBadRequest, "name is required")
+		return fiber.NewError(fiber.StatusBadRequest, "name is required")
 	}
 
 	list, err := l.repo.UpdateListById(c.Context(), params.ID, req.Name)
@@ -292,7 +332,7 @@ func (l *ListsHandlers) Delete(c *fiber.Ctx) error {
 		ID int64 `params:"id"`
 	}
 	if err := c.ParamsParser(&params); err != nil {
-		return fiber.NewError(http.StatusBadRequest, err.Error())
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
 
 	err := l.repo.DeleteListById(c.Context(), params.ID)
@@ -300,5 +340,5 @@ func (l *ListsHandlers) Delete(c *fiber.Ctx) error {
 		return err
 	}
 
-	return c.SendStatus(http.StatusNoContent)
+	return c.SendStatus(fiber.StatusNoContent)
 }

@@ -1,21 +1,26 @@
 package errors
 
 import (
+	"fmt"
 	"htmxtodo/views/layouts"
 )
 
-templ Error404() {
-	@layouts.Main(error404Content(), "404 - Not Found")
+templ Error403() {
+	@layouts.Main(genericError(403, "Forbidden"), "403 Forbidden")
 }
 
-templ error404Content() {
-	<h1>404 - Not Found</h1>
+templ Error404() {
+	@layouts.Main(genericError(404, "Not Found"), "404 Not Found")
 }
 
 templ Error500() {
-	@layouts.Main(error500Content(), "500 - Internal Server Error")
+	@layouts.Main(genericError(500, "Internal Server Error"), "500 Internal Server Error")
 }
 
-templ error500Content() {
-	<h1>500 - Internal Server Error</h1>
+templ GenericError(status int, msg string) {
+	@layouts.Main(genericError(status, msg), fmt.Sprintf("%d - %s", status, msg))
+}
+
+templ genericError(status int, msg string) {
+	<h1>{fmt.Sprintf("%d", status)} - {msg}</h1>
 }
