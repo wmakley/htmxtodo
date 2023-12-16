@@ -11,7 +11,7 @@ templ Login(form LoginForm) {
 templ login(form LoginForm) {
 	<h1 class="title">Login</h1>
 
-	<form method="POST" action="/login" hx-boost="true" id="login-form">
+	<form method="POST" action="/login" id="login-form">
 		<div class="field">
 			<label class="label" for="register_email">Email</label>
 			<div class="control has-icons-left has-icons-right">
@@ -57,7 +57,7 @@ templ login(form LoginForm) {
 	</form>
 
 	<p>
-		<a href="/register" hx-boost="true">Register</a>
+		<a href="/register">Register</a>
 	</p>
 }
 
@@ -132,6 +132,6 @@ templ register(form RegistrationForm, errorMsg string) {
 	</form>
 
 	<p>
-		<a href="/login" hx-boost="true">Login</a>
+		<a href="/login">Login</a>
 	</p>
 }
