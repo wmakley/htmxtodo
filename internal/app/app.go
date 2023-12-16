@@ -17,6 +17,7 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/fiber/v2/middleware/session"
+	"github.com/gofiber/storage/postgres/v3"
 	_ "github.com/lib/pq"
 	"htmxtodo/gen/htmxtodo_dev/public/model"
 	"htmxtodo/internal/repo"
@@ -36,15 +37,23 @@ type Config struct {
 	Port            string
 	Repo            repo.Repository
 	CognitoClientId string
+	DatabaseUrl     string
 }
 
 func NewConfigFromEnvironment(repo repo.Repository) Config {
+	env := os.Getenv("ENV")
+	dbUrlKey := "DATABASE_URL"
+	if env == "TEST" {
+		dbUrlKey = "TEST_DATABASE_URL"
+	}
+
 	return Config{
-		Env:             os.Getenv("ENV"),
+		Env:             env,
 		Host:            os.Getenv("HOST"),
 		Port:            os.Getenv("PORT"),
 		Repo:            repo,
 		CognitoClientId: os.Getenv("COGNITO_CLIENT_ID"),
+		DatabaseUrl:     os.Getenv(dbUrlKey),
 	}
 }
 
@@ -60,11 +69,16 @@ func New(config *Config) *fiber.App {
 		ErrorHandler: errorHandler,
 	})
 
+	postgresStorage := postgres.New(postgres.Config{
+		ConnectionURI: config.DatabaseUrl,
+	})
+
 	sessionStore := session.New(session.Config{
 		Expiration:     24 * time.Hour * 30,
 		KeyLookup:      "cookie:htmxtodo_session_id",
 		CookieSecure:   config.Env == "production",
 		CookieHTTPOnly: true,
+		Storage:        postgresStorage,
 	})
 
 	app.Use(logger.New(logger.Config{
@@ -78,12 +92,12 @@ func New(config *Config) *fiber.App {
 	app.Use(favicon.New())
 	app.Use(csrf.New(csrf.Config{
 		CookieSecure: config.Env == "production",
-		//CookieHTTPOnly: true,
-		Session: sessionStore,
+		Session:      sessionStore,
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			fiberlog.Error("CSRF error: ", err.Error())
-			return view.RenderComponent(c, fiber.StatusForbidden,
-				errorviews.GenericError(fiber.StatusForbidden, "Forbidden"))
+			return c.Redirect("/login", fiber.StatusFound)
+			//return view.RenderComponent(c, fiber.StatusForbidden,
+			//	errorviews.GenericError(fiber.StatusForbidden, "Forbidden"))
 		},
 		ContextKey: csrfToken,
 		CookieName: "htmxtodo_csrf",
