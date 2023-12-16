@@ -26,22 +26,25 @@ import (
 	loginviews "htmxtodo/views/login"
 	"os"
 	"strings"
+	"time"
 )
 
 // Config is the global config for the app router. Host and Port are needed for absolute URL generation.
 type Config struct {
-	Env  string
-	Host string
-	Port string
-	Repo repo.Repository
+	Env             string
+	Host            string
+	Port            string
+	Repo            repo.Repository
+	CognitoClientId string
 }
 
 func NewConfigFromEnvironment(repo repo.Repository) Config {
 	return Config{
-		Env:  os.Getenv("ENV"),
-		Host: os.Getenv("HOST"),
-		Port: os.Getenv("PORT"),
-		Repo: repo,
+		Env:             os.Getenv("ENV"),
+		Host:            os.Getenv("HOST"),
+		Port:            os.Getenv("PORT"),
+		Repo:            repo,
+		CognitoClientId: os.Getenv("COGNITO_CLIENT_ID"),
 	}
 }
 
@@ -57,7 +60,12 @@ func New(config *Config) *fiber.App {
 		ErrorHandler: errorHandler,
 	})
 
-	sessionStore := session.New()
+	sessionStore := session.New(session.Config{
+		Expiration:     24 * time.Hour * 30,
+		KeyLookup:      "cookie:htmxtodo_session_id",
+		CookieSecure:   config.Env == "production",
+		CookieHTTPOnly: true,
+	})
 
 	app.Use(logger.New(logger.Config{
 		DisableColors: config.Env == Production,
@@ -69,15 +77,16 @@ func New(config *Config) *fiber.App {
 	app.Use(helmet.New())
 	app.Use(favicon.New())
 	app.Use(csrf.New(csrf.Config{
-		CookieSecure: os.Getenv("ENV") == "production",
-		Session:      sessionStore,
+		CookieSecure: config.Env == "production",
+		//CookieHTTPOnly: true,
+		Session: sessionStore,
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			fiberlog.Error("CSRF error: ", err.Error())
 			return view.RenderComponent(c, fiber.StatusForbidden,
 				errorviews.GenericError(fiber.StatusForbidden, "Forbidden"))
 		},
 		ContextKey: csrfToken,
-		CookieName: "csrf_htmxtodo",
+		CookieName: "htmxtodo_csrf",
 	}))
 
 	awsCfg, err := awsconfig.LoadDefaultConfig(context.TODO())
@@ -90,7 +99,7 @@ func New(config *Config) *fiber.App {
 	login := LoginHandlers{
 		sessionStore:    sessionStore,
 		cognitoClient:   cognitoClient,
-		cognitoClientId: os.Getenv("COGNITO_CLIENT_ID"),
+		cognitoClientId: config.CognitoClientId,
 	}
 
 	lists := ListsHandlers{
@@ -103,6 +112,7 @@ func New(config *Config) *fiber.App {
 	})
 	app.Get("/login", login.LoginForm)
 	app.Post("/login", login.SubmitLogin)
+	app.Post("/logout", login.Logout)
 
 	app.Get("/register", login.Register)
 	app.Post("/register", login.SubmitRegistration)
@@ -115,6 +125,7 @@ func New(config *Config) *fiber.App {
 
 		loggedIn := sess.Get("logged_in")
 		if loggedIn != "true" {
+			fiberlog.Error("not logged in")
 			return view.RenderComponent(c, fiber.StatusForbidden, errorviews.Error403())
 		}
 
@@ -157,8 +168,13 @@ func (l *LoginHandlers) SubmitLogin(c *fiber.Ctx) error {
 	}
 
 	sess.Set("logged_in", "true")
+	err = sess.Save()
+	if err != nil {
+		panic(err)
+	}
 
-	return view.RenderComponent(c, 200, loginviews.Login(form))
+	c.Set("HX-Location", "/lists")
+	return c.Redirect("/lists", fiber.StatusFound)
 }
 
 func (l *LoginHandlers) Logout(c *fiber.Ctx) error {
@@ -166,8 +182,10 @@ func (l *LoginHandlers) Logout(c *fiber.Ctx) error {
 	if err != nil {
 		panic(err)
 	}
-
-	sess.Delete("logged_in")
+	err = sess.Reset()
+	if err != nil {
+		panic(err)
+	}
 
 	c.Set("HX-Location", "/")
 	return c.Redirect("/", fiber.StatusFound)
@@ -218,8 +236,8 @@ func (l *LoginHandlers) SubmitRegistration(c *fiber.Ctx) error {
 		return view.RenderComponent(c, fiber.StatusUnprocessableEntity, loginviews.Register(form, err.Error()))
 	}
 
-	c.Set("HX-Location", "/lists")
-	return c.Redirect("/lists", fiber.StatusFound)
+	c.Set("HX-Location", "/login")
+	return c.Redirect("/login", fiber.StatusFound)
 }
 
 type ListsHandlers struct {
