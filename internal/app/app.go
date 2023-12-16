@@ -95,9 +95,8 @@ func New(config *Config) *fiber.App {
 		Session:      sessionStore,
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			fiberlog.Error("CSRF error: ", err.Error())
-			return c.Redirect("/login", fiber.StatusFound)
-			//return view.RenderComponent(c, fiber.StatusForbidden,
-			//	errorviews.GenericError(fiber.StatusForbidden, "Forbidden"))
+			return view.RenderComponent(c, fiber.StatusForbidden,
+				errorviews.GenericError(fiber.StatusForbidden, "Forbidden"))
 		},
 		ContextKey: csrfToken,
 		CookieName: "htmxtodo_csrf",
@@ -140,7 +139,7 @@ func New(config *Config) *fiber.App {
 		loggedIn := sess.Get("logged_in")
 		if loggedIn != "true" {
 			fiberlog.Error("not logged in")
-			return view.RenderComponent(c, fiber.StatusForbidden, errorviews.Error403())
+			return c.Redirect("/login", fiber.StatusFound)
 		}
 
 		return c.Next()
@@ -181,6 +180,9 @@ func (l *LoginHandlers) SubmitLogin(c *fiber.Ctx) error {
 		panic(err)
 	}
 
+	if err = sess.Reset(); err != nil {
+		panic(err)
+	}
 	sess.Set("logged_in", "true")
 	err = sess.Save()
 	if err != nil {
