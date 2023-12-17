@@ -64,9 +64,6 @@ func NewConfigFromEnvironment(repo repo.Repository, staticFS embed.FS) Config {
 	}
 }
 
-const Development = "development"
-const Production = "production"
-
 func New(config *Config) *fiber.App {
 	fiberlog.Debug("Starting app with config:", config)
 
@@ -90,10 +87,10 @@ func New(config *Config) *fiber.App {
 	renderer := &view.Renderer{SessionStore: sessionStore}
 
 	app.Use(logger.New(logger.Config{
-		DisableColors: config.Env == Production,
+		DisableColors: config.Env == constants.EnvProduction,
 	}))
 	app.Use(recover.New(recover.Config{
-		EnableStackTrace: config.Env == Development,
+		EnableStackTrace: config.Env == constants.EnvDevelopment,
 	}))
 	app.Use(compress.New())
 	app.Use(helmet.New())
