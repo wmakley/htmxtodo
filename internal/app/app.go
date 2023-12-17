@@ -37,13 +37,16 @@ import (
 
 // Config is the global config for the app router. Host and Port are needed for absolute URL generation.
 type Config struct {
-	Env             string
-	Host            string
-	Port            string
-	Repo            repo.Repository
-	CognitoClientId string
-	DatabaseUrl     string
-	StaticFS        embed.FS
+	Env              string
+	Host             string
+	Port             string
+	Repo             repo.Repository
+	CognitoClientId  string
+	CookieSecure     bool
+	DatabaseUrl      string
+	DisableLogColors bool
+	EnableStackTrace bool
+	StaticFS         embed.FS
 }
 
 func NewConfigFromEnvironment(repo repo.Repository, staticFS embed.FS) Config {
@@ -54,13 +57,16 @@ func NewConfigFromEnvironment(repo repo.Repository, staticFS embed.FS) Config {
 	}
 
 	return Config{
-		Env:             env,
-		Host:            os.Getenv("HOST"),
-		Port:            os.Getenv("PORT"),
-		Repo:            repo,
-		CognitoClientId: os.Getenv("COGNITO_CLIENT_ID"),
-		DatabaseUrl:     os.Getenv(dbUrlKey),
-		StaticFS:        staticFS,
+		Env:              env,
+		Host:             os.Getenv("HOST"),
+		Port:             os.Getenv("PORT"),
+		Repo:             repo,
+		CognitoClientId:  os.Getenv("COGNITO_CLIENT_ID"),
+		CookieSecure:     env == constants.EnvProduction,
+		DatabaseUrl:      os.Getenv(dbUrlKey),
+		DisableLogColors: env == constants.EnvProduction,
+		EnableStackTrace: env == constants.EnvDevelopment,
+		StaticFS:         staticFS,
 	}
 }
 
@@ -79,7 +85,7 @@ func New(config *Config) *fiber.App {
 	sessionStore := session.New(session.Config{
 		Expiration:     24 * time.Hour * 30,
 		KeyLookup:      "cookie:htmxtodo_session_id",
-		CookieSecure:   config.Env == "production",
+		CookieSecure:   config.CookieSecure,
 		CookieHTTPOnly: true,
 		Storage:        postgresStorage,
 	})
@@ -87,10 +93,10 @@ func New(config *Config) *fiber.App {
 	renderer := &view.Renderer{SessionStore: sessionStore}
 
 	app.Use(logger.New(logger.Config{
-		DisableColors: config.Env == constants.EnvProduction,
+		DisableColors: config.DisableLogColors,
 	}))
 	app.Use(recover.New(recover.Config{
-		EnableStackTrace: config.Env == constants.EnvDevelopment,
+		EnableStackTrace: config.EnableStackTrace,
 	}))
 	app.Use(compress.New())
 	app.Use(helmet.New())
@@ -106,7 +112,7 @@ func New(config *Config) *fiber.App {
 	csrfFromHeader := csrf.CsrfFromHeader("X-CSRF-Token")
 
 	app.Use(csrf.New(csrf.Config{
-		CookieSecure: config.Env == "production",
+		CookieSecure: config.CookieSecure,
 		Session:      sessionStore,
 		Extractor: func(c *fiber.Ctx) (string, error) {
 			token, err := csrfFromForm(c)
