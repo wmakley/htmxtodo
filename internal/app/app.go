@@ -34,7 +34,7 @@ import (
 )
 
 func New(config *Config) *fiber.App {
-	fiberlog.Debug("Starting app with config:", config)
+	fiberlog.Info("Starting app with environment: ", config.Env)
 
 	app := fiber.New(fiber.Config{
 		AppName:      "HtmxTodo 0.1.0",
@@ -119,34 +119,14 @@ func New(config *Config) *fiber.App {
 		sessionStore: sessionStore,
 	}
 
-	// check logged-in status
-	app.Use(func(c *fiber.Ctx) error {
-		sess, err := sessionStore.Get(c)
-		if err != nil {
-			panic(err)
-		}
-
-		loggedIn := sess.Get(constants.LoggedInSessionKey) == "true"
-		c.Locals(constants.LoggedInSessionKey, loggedIn)
-
-		return c.Next()
-	})
+	// check logged-in status on all routes
+	app.Use(SetLoggedIn(sessionStore))
 
 	app.Get("/", func(c *fiber.Ctx) error {
 		return c.Redirect("/login", fiber.StatusFound)
 	})
 
-	internal := app.Group("/app", func(c *fiber.Ctx) error {
-		loggedIn := c.Locals(constants.LoggedInSessionKey).(bool)
-		if !loggedIn {
-			fiberlog.Error("not logged in, redirecting to login")
-			return c.Redirect("/login", fiber.StatusFound)
-		}
-
-		c.Locals(constants.LoggedInSessionKey, loggedIn)
-
-		return c.Next()
-	})
+	internal := app.Group("/app", RequireLoggedIn)
 
 	internal.Get("/lists", lists.Index)
 	internal.Post("/lists", lists.Create)
@@ -155,15 +135,8 @@ func New(config *Config) *fiber.App {
 	internal.Delete("/lists/:id", lists.Delete)
 	internal.Post("/logout", login.Logout)
 
-	external := app.Group("", func(c *fiber.Ctx) error {
-		loggedIn := c.Locals(constants.LoggedInSessionKey).(bool)
-		if loggedIn {
-			fiberlog.Error("logged in, redirecting to internal")
-			return c.Redirect("/app/lists", fiber.StatusFound)
-		}
+	external := app.Group("", RedirectInternalIfLoggedIn)
 
-		return c.Next()
-	})
 	external.Get("/login", login.LoginForm)
 	external.Post("/login", login.SubmitLogin)
 
