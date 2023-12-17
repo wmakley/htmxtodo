@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"embed"
 	"errors"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	_ "github.com/aws/aws-sdk-go-v2/aws"
@@ -30,45 +29,9 @@ import (
 	listviews "htmxtodo/views/lists"
 	loginviews "htmxtodo/views/login"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
-
-// Config is the global config for the app router. Host and Port are needed for absolute URL generation.
-type Config struct {
-	Env              string
-	Host             string
-	Port             string
-	Repo             repo.Repository
-	CognitoClientId  string
-	CookieSecure     bool
-	DatabaseUrl      string
-	DisableLogColors bool
-	EnableStackTrace bool
-	StaticFS         embed.FS
-}
-
-func NewConfigFromEnvironment(repo repo.Repository, staticFS embed.FS) Config {
-	env := os.Getenv("ENV")
-	dbUrlKey := "DATABASE_URL"
-	if env == "TEST" {
-		dbUrlKey = "TEST_DATABASE_URL"
-	}
-
-	return Config{
-		Env:              env,
-		Host:             os.Getenv("HOST"),
-		Port:             os.Getenv("PORT"),
-		Repo:             repo,
-		CognitoClientId:  os.Getenv("COGNITO_CLIENT_ID"),
-		CookieSecure:     env == constants.EnvProduction,
-		DatabaseUrl:      os.Getenv(dbUrlKey),
-		DisableLogColors: env == constants.EnvProduction,
-		EnableStackTrace: env == constants.EnvDevelopment,
-		StaticFS:         staticFS,
-	}
-}
 
 func New(config *Config) *fiber.App {
 	fiberlog.Debug("Starting app with config:", config)
@@ -156,25 +119,27 @@ func New(config *Config) *fiber.App {
 		sessionStore: sessionStore,
 	}
 
-	app.Get("/", func(c *fiber.Ctx) error {
-		return c.Redirect("/login", fiber.StatusFound)
-	})
-	app.Get("/login", login.LoginForm)
-	app.Post("/login", login.SubmitLogin)
-	app.Post("/logout", login.Logout)
-
-	app.Get("/register", login.Register)
-	app.Post("/register", login.SubmitRegistration)
-
-	internal := app.Group("/app", func(c *fiber.Ctx) error {
+	// check logged-in status
+	app.Use(func(c *fiber.Ctx) error {
 		sess, err := sessionStore.Get(c)
 		if err != nil {
 			panic(err)
 		}
 
 		loggedIn := sess.Get(constants.LoggedInSessionKey) == "true"
+		c.Locals(constants.LoggedInSessionKey, loggedIn)
+
+		return c.Next()
+	})
+
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.Redirect("/login", fiber.StatusFound)
+	})
+
+	internal := app.Group("/app", func(c *fiber.Ctx) error {
+		loggedIn := c.Locals(constants.LoggedInSessionKey).(bool)
 		if !loggedIn {
-			fiberlog.Error("not logged in")
+			fiberlog.Error("not logged in, redirecting to login")
 			return c.Redirect("/login", fiber.StatusFound)
 		}
 
@@ -188,6 +153,22 @@ func New(config *Config) *fiber.App {
 	internal.Get("/lists/:id/edit", lists.Edit)
 	internal.Patch("/lists/:id", lists.Update)
 	internal.Delete("/lists/:id", lists.Delete)
+	internal.Post("/logout", login.Logout)
+
+	external := app.Group("", func(c *fiber.Ctx) error {
+		loggedIn := c.Locals(constants.LoggedInSessionKey).(bool)
+		if loggedIn {
+			fiberlog.Error("logged in, redirecting to internal")
+			return c.Redirect("/app/lists", fiber.StatusFound)
+		}
+
+		return c.Next()
+	})
+	external.Get("/login", login.LoginForm)
+	external.Post("/login", login.SubmitLogin)
+
+	external.Get("/register", login.Register)
+	external.Post("/register", login.SubmitRegistration)
 
 	return app
 }
