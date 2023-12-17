@@ -2,12 +2,16 @@ package main
 
 import (
 	"database/sql"
+	"embed"
 	"github.com/joho/godotenv"
 	"htmxtodo/internal/app"
 	"htmxtodo/internal/repo"
 	"log"
 	"os"
 )
+
+//go:embed static/*
+var staticEmbedFS embed.FS
 
 func main() {
 	err := godotenv.Load()
@@ -28,7 +32,7 @@ func main() {
 
 	r := repo.New(db)
 
-	config := app.NewConfigFromEnvironment(r)
+	config := app.NewConfigFromEnvironment(r, staticEmbedFS)
 
 	a := app.New(&config)
 

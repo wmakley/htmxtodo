@@ -12,6 +12,6 @@ templ:
 	templ generate
 
 clean:
-	rm build/app
+	rm -fv build/app tmp/main
 
 .PHONY: templ serve clean

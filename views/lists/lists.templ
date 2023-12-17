@@ -1,6 +1,7 @@
 package lists
 
 import (
+	c "htmxtodo/components"
 	"htmxtodo/gen/htmxtodo_dev/public/model"
 	"htmxtodo/views/layouts"
 )
@@ -26,6 +27,7 @@ templ Card(card CardProps) {
 				<p class="card-header-title">
 					if card.EditingName {
 						<form hx-patch={ card.ListUrl() }>
+							@c.CsrfInputTag()
 							<input type="text"
 								   value={ card.List.Name }
 								   class="input"
@@ -71,10 +73,11 @@ templ Card(card CardProps) {
 
 templ Form(newList model.List, errors string) {
 	<form id="create-list-form"
-		  hx-post="/lists"
+		  hx-post="/app/lists"
 		  hx-target="#lists"
 		  hx-swap="beforeend scroll:bottom"
 		  hx-swap-oob="true">
+		@c.CsrfInputTag()
 		<div class="field">
 			<label class="label" for="list_name">Add List:</label>
 			<div class="control">

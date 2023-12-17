@@ -1,6 +1,7 @@
 package login
 
 import (
+	"htmxtodo/components"
 	"htmxtodo/views/layouts"
 )
 
@@ -12,6 +13,8 @@ templ login(form LoginForm) {
 	<h1 class="title">Login</h1>
 
 	<form method="POST" action="/login" id="login-form">
+		@components.CsrfInputTag()
+
 		<div class="field">
 			<label class="label" for="register_email">Email</label>
 			<div class="control has-icons-left has-icons-right">
@@ -69,6 +72,8 @@ templ register(form RegistrationForm, errorMsg string) {
 	<h1 class="title">Register</h1>
 
 	<form method="POST" action="/register" id="registration-form">
+		@components.CsrfInputTag()
+
 		<p class="is-danger">{errorMsg}</p>
 
 		<div class="field">

@@ -1,0 +1,25 @@
+package components
+
+import (
+	"htmxtodo/internal/constants"
+)
+
+templ CsrfInputTag() {
+	<input type="hidden" name={constants.CsrfInputName} value={GetCsrfToken(ctx)} />
+}
+
+templ LogoutButton() {
+	<div id="logout-button">
+		if GetLoggedIn(ctx) {
+			<form method="post" action="/logout">
+				@CsrfInputTag()
+
+				<div class="field">
+					<div class="control">
+						<button type="submit" class="button is-link is-light">Logout</button>
+					</div>
+				</div>
+			</form>
+		}
+	</div>
+}
