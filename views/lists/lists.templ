@@ -28,13 +28,19 @@ templ Card(card CardProps) {
 					if card.EditingName {
 						<form hx-patch={ card.ListUrl() }>
 							@c.CsrfInputTag()
-							<input type="text"
-								   value={ card.List.Name }
-								   class="input"
-								   placeholder="Name"
-								   aria-label="Name"
-								   name="name"/>
-							<button class="button is-link is-small ml-2">Save</button>
+							<div class="field has-addons">
+								<div class="control">
+									<input type="text"
+										   value={ card.List.Name }
+										   class="input"
+										   placeholder="Name"
+										   aria-label="Name"
+										   name="name"/>
+								</div>
+								<div class="control">
+									<button class="button is-info">Save</button>
+								</div>
+							</div>
 						</form>
 					} else {
 						if card.List.Name != "" {
