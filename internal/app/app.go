@@ -22,6 +22,7 @@ import (
 	"github.com/gofiber/storage/postgres/v3"
 	_ "github.com/lib/pq"
 	"htmxtodo/gen/htmxtodo_dev/public/model"
+	"htmxtodo/internal/config"
 	"htmxtodo/internal/constants"
 	"htmxtodo/internal/repo"
 	"htmxtodo/internal/view"
@@ -33,8 +34,8 @@ import (
 	"time"
 )
 
-func New(config *Config) *fiber.App {
-	fiberlog.Info("Starting app with environment: ", config.Env)
+func New(cfg *config.Config) *fiber.App {
+	fiberlog.Info("Starting app with environment: ", cfg.Env)
 
 	app := fiber.New(fiber.Config{
 		AppName:      "HtmxTodo 0.1.0",
@@ -42,13 +43,13 @@ func New(config *Config) *fiber.App {
 	})
 
 	postgresStorage := postgres.New(postgres.Config{
-		ConnectionURI: config.DatabaseUrl,
+		ConnectionURI: cfg.DatabaseUrl,
 	})
 
 	sessionStore := session.New(session.Config{
 		Expiration:     24 * time.Hour * 30,
 		KeyLookup:      "cookie:htmxtodo_session_id",
-		CookieSecure:   config.CookieSecure,
+		CookieSecure:   cfg.CookieSecure,
 		CookieHTTPOnly: true,
 		Storage:        postgresStorage,
 	})
@@ -56,16 +57,16 @@ func New(config *Config) *fiber.App {
 	renderer := &view.Renderer{SessionStore: sessionStore}
 
 	app.Use(logger.New(logger.Config{
-		DisableColors: config.DisableLogColors,
+		DisableColors: cfg.DisableLogColors,
 	}))
 	app.Use(recover.New(recover.Config{
-		EnableStackTrace: config.EnableStackTrace,
+		EnableStackTrace: cfg.EnableStackTrace,
 	}))
 	app.Use(compress.New())
 	app.Use(helmet.New())
 	app.Use(favicon.New())
 	app.Use("/static", filesystem.New(filesystem.Config{
-		Root:       http.FS(config.StaticFS),
+		Root:       http.FS(cfg.StaticFS),
 		PathPrefix: "static",
 	}))
 
@@ -75,7 +76,7 @@ func New(config *Config) *fiber.App {
 	csrfFromHeader := csrf.CsrfFromHeader("X-CSRF-Token")
 
 	app.Use(csrf.New(csrf.Config{
-		CookieSecure: config.CookieSecure,
+		CookieSecure: cfg.CookieSecure,
 		Session:      sessionStore,
 		Extractor: func(c *fiber.Ctx) (string, error) {
 			token, err := csrfFromForm(c)
@@ -110,12 +111,12 @@ func New(config *Config) *fiber.App {
 		renderer:        renderer,
 		sessionStore:    sessionStore,
 		cognitoClient:   cognitoClient,
-		cognitoClientId: config.CognitoClientId,
+		cognitoClientId: cfg.CognitoClientId,
 	}
 
 	lists := ListsHandlers{
 		renderer:     renderer,
-		repo:         config.Repo,
+		repo:         cfg.Repo,
 		sessionStore: sessionStore,
 	}
 

@@ -5,7 +5,7 @@ import (
 	"embed"
 	"github.com/joho/godotenv"
 	"htmxtodo/internal/app"
-	"htmxtodo/internal/repo"
+	"htmxtodo/internal/config"
 	"log"
 	"os"
 )
@@ -30,11 +30,9 @@ func main() {
 		}
 	}(db)
 
-	r := repo.New(db)
+	cfg := config.NewConfigFromEnvironment(db, staticEmbedFS)
 
-	config := app.NewConfigFromEnvironment(r, staticEmbedFS)
+	a := app.New(&cfg)
 
-	a := app.New(&config)
-
-	log.Fatal(a.Listen(config.Host + ":" + config.Port))
+	log.Fatal(a.Listen(cfg.Host + ":" + cfg.Port))
 }
