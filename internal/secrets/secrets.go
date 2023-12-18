@@ -1,7 +1,6 @@
 package secrets
 
 import (
-	"htmxtodo/internal/constants"
 	"os"
 )
 
@@ -10,14 +9,9 @@ type Secrets interface {
 	CognitoClientId() string
 }
 
-func New(env string) Secrets {
-	dbUrlKey := "DATABASE_URL"
-	if env == constants.EnvTest {
-		dbUrlKey = "TEST_DATABASE_URL"
-	}
-
+func New() Secrets {
 	return &secrets{
-		databaseUrl:     os.Getenv(dbUrlKey),
+		databaseUrl:     os.Getenv("DATABASE_URL"),
 		cognitoClientId: os.Getenv("COGNITO_CLIENT_ID"),
 	}
 }

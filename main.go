@@ -30,9 +30,9 @@ func main() {
 		}
 	}(db)
 
-	cfg := config.NewConfigFromEnvironment(db, staticEmbedFS)
+	cfg := config.NewConfigFromEnvironment(db, &staticEmbedFS)
 
-	a := app.New(&cfg)
+	a := app.New(cfg)
 
 	log.Fatal(a.Listen(cfg.Host + ":" + cfg.Port))
 }

@@ -14,4 +14,8 @@ templ:
 clean:
 	rm -fv build/app tmp/main
 
-.PHONY: templ serve clean
+test: templ
+	dbmate --env-file .env.test up
+	go test -v htmxtodo/internal/app
+
+.PHONY: templ serve clean test

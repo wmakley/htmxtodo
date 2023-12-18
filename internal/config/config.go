@@ -18,14 +18,14 @@ type Config struct {
 	CookieSecure     bool
 	DisableLogColors bool
 	EnableStackTrace bool
-	StaticFS         embed.FS
+	StaticFS         *embed.FS
 	Secrets          secrets.Secrets
 }
 
-func NewConfigFromEnvironment(dbConn *sql.DB, staticFS embed.FS) Config {
+func NewConfigFromEnvironment(dbConn *sql.DB, staticFS *embed.FS) *Config {
 	env := os.Getenv("ENV")
 
-	return Config{
+	return &Config{
 		Env:              env,
 		Host:             os.Getenv("HOST"),
 		Port:             os.Getenv("PORT"),
@@ -34,6 +34,20 @@ func NewConfigFromEnvironment(dbConn *sql.DB, staticFS embed.FS) Config {
 		DisableLogColors: env == constants.EnvProduction,
 		EnableStackTrace: env == constants.EnvDevelopment,
 		StaticFS:         staticFS,
-		Secrets:          secrets.New(env),
+		Secrets:          secrets.New(),
+	}
+}
+
+func NewTestConfig(dbConn *sql.DB) *Config {
+	return &Config{
+		Env:              constants.EnvTest,
+		Host:             os.Getenv("HOST"),
+		Port:             os.Getenv("PORT"),
+		Repo:             repo.New(dbConn),
+		CookieSecure:     false,
+		DisableLogColors: false,
+		EnableStackTrace: true,
+		StaticFS:         nil,
+		Secrets:          secrets.New(),
 	}
 }

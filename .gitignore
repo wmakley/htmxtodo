@@ -4,6 +4,7 @@
 
 # secrets
 .env
+.env.*
 
 # cruft
 rustc-*

@@ -14,6 +14,17 @@ SET default_tablespace = '';
 SET default_table_access_method = heap;
 
 --
+-- Name: fiber_storage; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.fiber_storage (
+    k character varying(64) DEFAULT ''::character varying NOT NULL,
+    v bytea NOT NULL,
+    e bigint DEFAULT '0'::bigint NOT NULL
+);
+
+
+--
 -- Name: item; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -101,6 +112,14 @@ ALTER TABLE ONLY public.list ALTER COLUMN id SET DEFAULT nextval('public.list_id
 
 
 --
+-- Name: fiber_storage fiber_storage_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.fiber_storage
+    ADD CONSTRAINT fiber_storage_pkey PRIMARY KEY (k);
+
+
+--
 -- Name: item item_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -130,6 +149,13 @@ ALTER TABLE ONLY public.list
 
 ALTER TABLE ONLY public.schema_migrations
     ADD CONSTRAINT schema_migrations_pkey PRIMARY KEY (version);
+
+
+--
+-- Name: e; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX e ON public.fiber_storage USING btree (e);
 
 
 --
