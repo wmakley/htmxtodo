@@ -29,7 +29,6 @@ import (
 	errorviews "htmxtodo/views/errors"
 	listviews "htmxtodo/views/lists"
 	loginviews "htmxtodo/views/login"
-	"net/http"
 	"strings"
 	"time"
 )
@@ -66,7 +65,7 @@ func New(cfg *config.Config) *fiber.App {
 	app.Use(helmet.New())
 	app.Use(favicon.New())
 	app.Use("/static", filesystem.New(filesystem.Config{
-		Root:       http.FS(cfg.StaticFS),
+		Root:       cfg.StaticFS,
 		PathPrefix: "static",
 	}))
 

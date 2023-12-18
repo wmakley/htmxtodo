@@ -6,6 +6,7 @@ import (
 	"htmxtodo/internal/constants"
 	"htmxtodo/internal/repo"
 	"htmxtodo/internal/secrets"
+	"net/http"
 	"os"
 )
 
@@ -18,7 +19,7 @@ type Config struct {
 	CookieSecure     bool
 	DisableLogColors bool
 	EnableStackTrace bool
-	StaticFS         *embed.FS
+	StaticFS         http.FileSystem
 	Secrets          secrets.Secrets
 }
 
@@ -33,7 +34,7 @@ func NewConfigFromEnvironment(dbConn *sql.DB, staticFS *embed.FS) *Config {
 		CookieSecure:     env == constants.EnvProduction,
 		DisableLogColors: env == constants.EnvProduction,
 		EnableStackTrace: env == constants.EnvDevelopment,
-		StaticFS:         staticFS,
+		StaticFS:         http.FS(staticFS),
 		Secrets:          secrets.New(),
 	}
 }
