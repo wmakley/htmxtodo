@@ -43,7 +43,7 @@ func New(cfg *config.Config) *fiber.App {
 	})
 
 	postgresStorage := postgres.New(postgres.Config{
-		ConnectionURI: cfg.DatabaseUrl,
+		ConnectionURI: cfg.Secrets.DatabaseUrl(),
 	})
 
 	sessionStore := session.New(session.Config{
@@ -111,7 +111,7 @@ func New(cfg *config.Config) *fiber.App {
 		renderer:        renderer,
 		sessionStore:    sessionStore,
 		cognitoClient:   cognitoClient,
-		cognitoClientId: cfg.CognitoClientId,
+		cognitoClientId: cfg.Secrets.CognitoClientId(),
 	}
 
 	lists := ListsHandlers{
