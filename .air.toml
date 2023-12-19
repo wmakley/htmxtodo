@@ -4,8 +4,8 @@ tmp_dir = "tmp"
 
 [build]
   args_bin = []
-  bin = "./tmp/main"
-  cmd = "make tmp/main"
+  bin = "./build/main"
+  cmd = "make build/main"
   delay = 1000
   exclude_dir = ["build", "tmp", "testdata", "src", "target", "cognito_auth"]
   exclude_file = []

@@ -1,8 +1,4 @@
-build/app: templ
-	mkdir -p build
-	go build -o $@ .
-
-tmp/main: templ
+build/main: templ
 	go build -o $@ .
 
 serve: templ
@@ -12,10 +8,10 @@ templ:
 	templ generate
 
 clean:
-	rm -fv build/app tmp/main
+	rm -fv build/main
 
 test: templ
 	dbmate --env-file .env.test up
-	go test -v htmxtodo/internal/app
+	go test htmxtodo/internal/app
 
 .PHONY: templ serve clean test

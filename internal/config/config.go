@@ -48,7 +48,7 @@ func NewTestConfig(dbConn *sql.DB) *Config {
 		CookieSecure:     false,
 		DisableLogColors: false,
 		EnableStackTrace: true,
-		StaticFS:         nil,
+		StaticFS:         http.Dir("./static"),
 		Secrets:          secrets.New(),
 	}
 }
